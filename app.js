@@ -14,7 +14,13 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const money = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const isoToday = () => new Date().toISOString().slice(0, 10);
+const isoToday = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+};
 const parseMoney = (value) => {
   if (typeof value === 'number') return value;
   const cleaned = String(value || '').trim().replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
@@ -52,7 +58,7 @@ function firstCardDueDate(purchaseDate, closingDay, dueDay) {
   const d = new Date(purchaseDate + 'T12:00:00');
   let closeMonth = d.getMonth();
   let closeYear = d.getFullYear();
-  if (d.getDate() > Number(closingDay || 28)) {
+  if (d.getDate() >= Number(closingDay || 28)) {
     closeMonth += 1;
     if (closeMonth > 11) { closeMonth = 0; closeYear += 1; }
   }
@@ -92,6 +98,7 @@ async function init() {
   const now = new Date();
   state.selectedMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   $('monthFilter').value = state.selectedMonth;
+  $('transactionPurchaseDate').value = isoToday();
   $('transactionDueDate').value = isoToday();
 
   wireEvents();
@@ -215,10 +222,12 @@ function paymentLabel(t) {
 
 function tableTransactions(items, actions=true) {
   if (!items.length) return `<div class="empty-state">Nenhum lançamento encontrado.</div>`;
-  return `<table class="data-table"><thead><tr><th>Descrição</th><th>Data</th><th>Categoria / origem</th><th>Pagamento</th><th>Status</th><th>Valor</th>${actions?'<th></th>':''}</tr></thead><tbody>` + items.map(t => {
+  return `<table class="data-table"><thead><tr><th>Descrição</th><th>Compra / lançamento</th><th>Vencimento</th><th>Categoria / origem</th><th>Pagamento</th><th>Status</th><th>Valor</th>${actions?'<th></th>':''}</tr></thead><tbody>` + items.map(t => {
     const cat = t.type === 'expense' ? byId(state.categories, t.category_id) : byId(state.incomeSources, t.income_source_id);
+    const purchaseDate = t.purchase_date || t.due_date;
     return `<tr>
       <td><strong>${escapeHtml(t.description)}</strong>${t.installment_total > 1 ? `<div class="list-item-sub">Parcela ${t.installment_number}/${t.installment_total}</div>` : ''}</td>
+      <td>${fmtDate(purchaseDate)}</td>
       <td>${fmtDate(t.due_date)}</td>
       <td>${escapeHtml(cat?.icon || '')} ${escapeHtml(cat?.name || '—')}</td>
       <td>${escapeHtml(paymentLabel(t))}</td>
@@ -314,6 +323,10 @@ function wireEvents() {
   document.querySelectorAll('.type-option').forEach(btn=>btn.addEventListener('click',()=>setTransactionType(btn.dataset.type)));
   $('paymentMethod').addEventListener('change', paymentMethodChanged);
   $('transactionCard').addEventListener('change', updateCreditDueDate);
+  $('transactionPurchaseDate').addEventListener('change', ()=>{
+    if($('paymentMethod').value==='credit') updateCreditDueDate();
+    else if(['pix','debit','cash'].includes($('paymentMethod').value)) $('transactionDueDate').value=$('transactionPurchaseDate').value;
+  });
   $('moreOptionsToggle').addEventListener('click', ()=> $('moreOptions').classList.toggle('hidden'));
   $('transactionStatus').addEventListener('change', ()=>{
     if ($('transactionStatus').value==='paid' && !$('transactionPaidAt').value) $('transactionPaidAt').value=isoToday();
@@ -343,7 +356,7 @@ function switchView(view) {
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $(view+'View').classList.add('active');
   const titles={dashboard:'Visão geral',transactions:'Lançamentos',planning:'Planejamento',cards:'Cartões',accounts:'Contas',settings:'Cadastros financeiros'};
-  $('viewTitle').textContent=titles[view]||'Meu Financeiro';
+  $('viewTitle').textContent=titles[view]||'NEXO Financeiro';
 }
 
 function setTransactionType(type) {
@@ -363,6 +376,7 @@ function openTransaction() {
   $('transactionForm').reset();
   $('transactionId').value='';
   $('transactionAmount').value='';
+  $('transactionPurchaseDate').value=isoToday();
   $('transactionDueDate').value=isoToday();
   $('transactionInstallments').value=1;
   $('moreOptions').classList.add('hidden');
@@ -386,7 +400,7 @@ function paymentMethodChanged() {
     if(state.cards.length && !$('transactionCard').value) $('transactionCard').value=state.cards[0].id;
     updateCreditDueDate();
   } else if(['pix','debit','cash'].includes(method)) {
-    $('transactionStatus').value='paid'; $('transactionPaidAt').value=isoToday(); $('transactionDueDate').value=isoToday();
+    $('transactionStatus').value='paid'; $('transactionPaidAt').value=isoToday(); $('transactionDueDate').value=$('transactionPurchaseDate').value || isoToday();
   } else {
     $('transactionStatus').value='pending'; $('transactionPaidAt').value='';
   }
@@ -395,7 +409,8 @@ function paymentMethodChanged() {
 function updateCreditDueDate(){
   if($('paymentMethod').value!=='credit') return;
   const card=byId(state.cards,$('transactionCard').value); if(!card)return;
-  $('transactionDueDate').value=firstCardDueDate(isoToday(),card.closing_day,card.due_day);
+  const purchaseDate=$('transactionPurchaseDate').value || isoToday();
+  $('transactionDueDate').value=firstCardDueDate(purchaseDate,card.closing_day,card.due_day);
 }
 
 async function saveTransaction(e) {
@@ -409,6 +424,7 @@ async function saveTransaction(e) {
   let status=$('transactionStatus').value;
   let paidAt=$('transactionPaidAt').value || null;
   const method= type==='expense' ? $('paymentMethod').value : 'income';
+  const purchaseDate = $('transactionPurchaseDate').value || isoToday();
   if(type==='expense' && method==='credit'){ status='pending'; paidAt=null; }
 
   const installments = type==='expense' && method==='credit' ? Math.max(1, Number($('transactionInstallments').value||1)) : 1;
@@ -420,10 +436,17 @@ async function saveTransaction(e) {
   for(let i=1;i<=installments;i++){
     const amount = i===installments ? Math.round(remaining*100)/100 : installmentAmount;
     remaining = Math.round((remaining-amount)*100)/100;
-    let dueDate=$('transactionDueDate').value || isoToday();
-    if(installments>1) dueDate=addMonths(dueDate,i-1);
+    let dueDate=$('transactionDueDate').value || purchaseDate;
+    if(type==='expense' && method==='credit'){
+      const card=byId(state.cards,$('transactionCard').value);
+      if(!card) return alert('Selecione o cartão.');
+      const firstDue=firstCardDueDate(purchaseDate,card.closing_day,card.due_day);
+      dueDate=addMonths(firstDue,i-1);
+    } else if(installments>1) {
+      dueDate=addMonths(dueDate,i-1);
+    }
     rows.push({
-      user_id:uid(), type, description, amount, due_date:dueDate, paid_at:installments>1?null:paidAt,
+      user_id:uid(), type, description, amount, purchase_date:purchaseDate, due_date:dueDate, paid_at:installments>1?null:paidAt,
       status:installments>1?'pending':status, payment_method: method,
       account_id: type==='income' ? ($('incomeAccount').value||null) : (method==='credit'?null:($('transactionAccount').value||null)),
       card_id: type==='expense' && method==='credit' ? ($('transactionCard').value||null) : null,
