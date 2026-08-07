@@ -1,55 +1,72 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meu Financeiro</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ff5a1f">
+  <title>NEXO Financeiro • Acesso</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="auth-page">
   <main class="auth-shell">
-    <section class="auth-brand">
-      <div class="brand-mark">$</div>
-      <div>
-        <p class="eyebrow">GESTÃO FINANCEIRA</p>
-        <h1>Seu dinheiro, sem planilha infinita.</h1>
-        <p>Controle contas, cartões, receitas e gastos do dia a dia com lançamentos rápidos.</p>
+    <section class="auth-brand" aria-label="NEXO Financeiro">
+      <div class="auth-brand-content">
+        <div class="auth-logo">NEXO</div>
+        <div class="auth-product">FINANCEIRO</div>
+        <p class="auth-kicker">GESTÃO FINANCEIRA PESSOAL</p>
+        <h1>Seu dinheiro organizado.<br><span>Sem planilha infinita.</span></h1>
+        <p class="auth-description">Controle receitas, contas, cartões e gastos do dia a dia em um só lugar, com a mesma experiência visual da família NEXO.</p>
+        <div class="auth-features">
+          <div><span>✓</span> Lançamento rápido</div>
+          <div><span>✓</span> Controle de cartões e limites</div>
+          <div><span>✓</span> Planejamento mensal</div>
+        </div>
       </div>
+      <div class="auth-brand-footer">NEXO • Gestão Financeira</div>
     </section>
 
     <section class="auth-card">
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-auth-tab="login">Entrar</button>
-        <button class="auth-tab" data-auth-tab="signup">Criar conta</button>
+      <div class="auth-card-head">
+        <div class="auth-card-logo">N</div>
+        <div>
+          <p class="eyebrow orange">BEM-VINDO AO</p>
+          <h2>NEXO Financeiro</h2>
+          <p>Entre na sua conta ou crie seu acesso.</p>
+        </div>
+      </div>
+
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" type="button" data-auth-tab="login">Entrar</button>
+        <button class="auth-tab" type="button" data-auth-tab="signup">Criar conta</button>
       </div>
 
       <form id="loginForm" class="auth-form active">
         <label>E-mail
-          <input id="loginEmail" type="email" autocomplete="email" required placeholder="voce@email.com" />
+          <input id="loginEmail" type="email" autocomplete="email" placeholder="voce@email.com" required>
         </label>
         <label>Senha
-          <input id="loginPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="••••••••" />
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Sua senha" required>
         </label>
         <button class="btn btn-primary btn-block" type="submit">Entrar</button>
       </form>
 
       <form id="signupForm" class="auth-form">
         <label>Nome
-          <input id="signupName" type="text" required placeholder="Seu nome" />
+          <input id="signupName" type="text" autocomplete="name" placeholder="Seu nome" required>
         </label>
         <label>E-mail
-          <input id="signupEmail" type="email" autocomplete="email" required placeholder="voce@email.com" />
+          <input id="signupEmail" type="email" autocomplete="email" placeholder="voce@email.com" required>
         </label>
         <label>Senha
-          <input id="signupPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres" />
+          <input id="signupPassword" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required>
         </label>
         <button class="btn btn-primary btn-block" type="submit">Criar minha conta</button>
       </form>
 
-      <p id="authMessage" class="form-message"></p>
+      <div id="authMessage" class="form-message" aria-live="polite"></div>
       <p class="auth-note">Se a confirmação de e-mail estiver ativada no Supabase, confirme o e-mail antes do primeiro acesso.</p>
     </section>
   </main>
