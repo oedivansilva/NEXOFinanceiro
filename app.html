@@ -1,315 +1,234 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#ff5a1f">
-  <title>NEXO Financeiro</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NEXO Financeiro — Pessoal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css?v=3.0" />
 </head>
 <body>
+  <header class="nexo-topbar app-global-topbar">
+    <div class="nexo-brand">
+      <span class="brand-mark small" aria-hidden="true">N</span>
+      <span class="brand-copy"><strong>NEXO</strong><small>Financeiro · Pessoal</small></span>
+    </div>
+    <div class="nexo-userbox">
+      <div><strong id="userMini">Carregando...</strong><small>Finanças pessoais</small></div>
+      <button id="logoutBtn" class="btn btn-light">Sair</button>
+    </div>
+  </header>
+
   <div class="app-layout">
     <aside class="sidebar">
-      <div class="sidebar-brand">
-        <strong>NEXO</strong>
-        <span>Gestão Financeira Pessoal</span>
-      </div>
-
-      <nav class="sidebar-nav" aria-label="Menu principal">
-        <button class="nav-item active" type="button" data-view="dashboard"><span class="nav-icon">⌂</span><span>Visão geral</span></button>
-        <button class="nav-item" type="button" data-view="transactions"><span class="nav-icon">⇄</span><span>Lançamentos</span></button>
-        <button class="nav-item" type="button" data-view="planning"><span class="nav-icon">▣</span><span>Planejamento</span></button>
-        <button class="nav-item" type="button" data-view="cards"><span class="nav-icon">▭</span><span>Cartões</span></button>
-        <button class="nav-item" type="button" data-view="accounts"><span class="nav-icon">▱</span><span>Contas</span></button>
-        <button class="nav-item" type="button" data-view="settings"><span class="nav-icon">⚙</span><span>Cadastros</span></button>
+      <div class="nav-title">FINANCEIRO PESSOAL</div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard">⌂ <span>Visão geral</span></button>
+        <button class="nav-item" data-view="transactions">↕ <span>Lançamentos</span></button>
+        <button class="nav-item" data-view="planning">▦ <span>Planejamento</span></button>
+        <button class="nav-item" data-view="cards">▣ <span>Cartões</span></button>
+        <button class="nav-item" data-view="accounts">◉ <span>Contas</span></button>
+        <button class="nav-item" data-view="settings">⚙ <span>Cadastros</span></button>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="sidebar-avatar">N</div>
-          <div>
-            <span>Conectado como</span>
-            <strong id="userMini">Usuário</strong>
-          </div>
-        </div>
-        <button id="logoutBtn" class="nav-item logout-item" type="button"><span class="nav-icon">↪</span><span>Sair</span></button>
-        <div class="sidebar-system-status"><span class="status-dot"></span>Sistema online</div>
-        <div class="sidebar-copy">© 2026 NEXO</div>
+        <div class="sidebar-tip"><strong>＋ Lançamento rápido</strong><span>Registre um gasto em poucos segundos.</span></div>
       </div>
     </aside>
 
     <main class="main-content">
       <header class="topbar">
         <div>
-          <p class="eyebrow">NEXO FINANCEIRO</p>
+          <p class="eyebrow" id="viewEyebrow">NEXO FINANCEIRO · PESSOAL</p>
           <h1 id="viewTitle">Visão geral</h1>
-          <p class="page-subtitle">Acompanhe sua vida financeira de forma simples e prática.</p>
         </div>
         <div class="topbar-actions">
-          <input id="monthFilter" class="month-input" type="month" aria-label="Mês de referência">
-          <button id="quickAddTop" class="btn btn-primary" type="button">＋ Novo lançamento</button>
+          <input id="monthFilter" type="month" class="month-input" />
+          <button id="quickAddTop" class="btn btn-primary">＋ Lançar</button>
         </div>
       </header>
 
       <section id="dashboardView" class="view active">
         <div class="summary-grid">
-          <article class="summary-card orange-accent">
-            <div class="summary-icon">R$</div>
-            <div><span>Saldo em contas</span><strong id="balanceTotal">R$ 0,00</strong><small>Saldo disponível agora</small></div>
-          </article>
-          <article class="summary-card green-accent">
-            <div class="summary-icon">↗</div>
-            <div><span>Receitas do mês</span><strong id="incomeMonth">R$ 0,00</strong><small>Previstas e recebidas</small></div>
-          </article>
-          <article class="summary-card red-accent">
-            <div class="summary-icon">↘</div>
-            <div><span>Despesas do mês</span><strong id="expenseMonth">R$ 0,00</strong><small>Previstas e pagas</small></div>
-          </article>
-          <article class="summary-card dark-accent">
-            <div class="summary-icon">◎</div>
-            <div><span>Saldo projetado</span><strong id="projectedBalance">R$ 0,00</strong><small>Após compromissos pendentes</small></div>
-          </article>
+          <article class="summary-card"><span>Saldo em contas</span><strong id="balanceTotal">R$ 0,00</strong><small>Saldo cadastrado</small></article>
+          <article class="summary-card"><span>Receitas do mês</span><strong id="incomeMonth">R$ 0,00</strong><small>Recebidas + previstas</small></article>
+          <article class="summary-card"><span>Despesas do mês</span><strong id="expenseMonth">R$ 0,00</strong><small>Pagas + pendentes</small></article>
+          <article class="summary-card highlight"><span>Saldo projetado</span><strong id="projectedBalance">R$ 0,00</strong><small>Saldo + receitas pendentes − despesas pendentes</small></article>
         </div>
 
         <div class="dashboard-grid">
           <article class="panel">
-            <div class="panel-head">
-              <div><p class="eyebrow">ATENÇÃO</p><h2>Próximos vencimentos</h2></div>
-              <button class="text-button" type="button" data-jump="transactions">Ver todos</button>
-            </div>
-            <div id="upcomingList" class="list-stack empty-state">Carregando...</div>
+            <div class="panel-head"><div><p class="eyebrow">CONTAS</p><h2>Próximos vencimentos</h2></div><button class="text-button" data-jump="transactions">Ver todos</button></div>
+            <div id="upcomingList" class="list-stack empty-state">Nenhuma conta pendente.</div>
           </article>
 
           <article class="panel">
-            <div class="panel-head">
-              <div><p class="eyebrow">CRÉDITO</p><h2>Seus cartões</h2></div>
-              <button class="text-button" type="button" data-jump="cards">Gerenciar</button>
-            </div>
-            <div id="dashboardCards" class="card-limit-list empty-state">Carregando...</div>
+            <div class="panel-head"><div><p class="eyebrow">CARTÕES</p><h2>Limites</h2></div><button class="text-button" data-jump="cards">Gerenciar</button></div>
+            <div id="dashboardCards" class="card-limit-list empty-state">Nenhum cartão cadastrado.</div>
           </article>
         </div>
 
         <article class="panel">
-          <div class="panel-head">
-            <div><p class="eyebrow">MOVIMENTAÇÕES</p><h2>Lançamentos recentes</h2></div>
-            <button class="btn btn-secondary" type="button" data-jump="transactions">Abrir lançamentos</button>
-          </div>
+          <div class="panel-head"><div><p class="eyebrow">MOVIMENTAÇÃO</p><h2>Últimos lançamentos</h2></div><button class="text-button" data-jump="transactions">Abrir lançamentos</button></div>
           <div id="recentTransactions" class="table-wrap"></div>
         </article>
       </section>
 
       <section id="transactionsView" class="view">
         <article class="panel">
-          <div class="panel-head wrap">
-            <div><p class="eyebrow">CONTROLE</p><h2>Lançamentos do mês</h2></div>
-            <button id="newTransactionBtn" class="btn btn-primary" type="button">＋ Novo lançamento</button>
-          </div>
+          <div class="panel-head wrap"><div><p class="eyebrow">MOVIMENTAÇÕES</p><h2>Lançamentos</h2></div><button id="newTransactionBtn" class="btn btn-primary">＋ Novo lançamento</button></div>
           <div class="filters-row">
-            <select id="transactionTypeFilter" aria-label="Filtrar por tipo">
-              <option value="all">Todos os tipos</option>
-              <option value="expense">Despesas</option>
-              <option value="income">Receitas</option>
-            </select>
-            <select id="transactionStatusFilter" aria-label="Filtrar por status">
-              <option value="all">Todos os status</option>
-              <option value="pending">Pendentes</option>
-              <option value="paid">Pagos / recebidos</option>
-              <option value="overdue">Atrasados</option>
-              <option value="cancelled">Cancelados</option>
-            </select>
+            <select id="transactionTypeFilter"><option value="all">Todos os tipos</option><option value="expense">Despesas</option><option value="income">Receitas</option></select>
+            <select id="transactionStatusFilter"><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="paid">Pagos/Recebidos</option><option value="overdue">Atrasados</option><option value="cancelled">Cancelados</option></select>
           </div>
           <div id="transactionsTable" class="table-wrap"></div>
         </article>
       </section>
 
       <section id="planningView" class="view">
-        <div class="summary-grid">
-          <article class="summary-card"><span>Receitas previstas</span><strong id="planningIncome">R$ 0,00</strong></article>
-          <article class="summary-card"><span>Despesas previstas</span><strong id="planningExpenses">R$ 0,00</strong></article>
-          <article class="summary-card"><span>Realizado</span><strong id="planningPaid">R$ 0,00</strong></article>
-          <article class="summary-card highlight"><span>Resultado do mês</span><strong id="planningResult">R$ 0,00</strong><small>Receitas menos despesas</small></article>
+        <div class="summary-grid planning-summary">
+          <article class="summary-card"><span>Previsto de receitas</span><strong id="planningIncome">R$ 0,00</strong></article>
+          <article class="summary-card"><span>Previsto de despesas</span><strong id="planningExpenses">R$ 0,00</strong></article>
+          <article class="summary-card"><span>Já realizado</span><strong id="planningPaid">R$ 0,00</strong></article>
+          <article class="summary-card highlight"><span>Resultado previsto</span><strong id="planningResult">R$ 0,00</strong></article>
         </div>
         <article class="panel">
-          <div class="panel-head"><div><p class="eyebrow">PLANEJAMENTO</p><h2>Previsto x realizado</h2></div></div>
+          <div class="panel-head"><div><p class="eyebrow">MÊS SELECIONADO</p><h2>Planejamento mensal</h2></div></div>
           <div id="planningTable" class="table-wrap"></div>
         </article>
       </section>
 
       <section id="cardsView" class="view">
-        <div class="section-action"><button id="newCardBtn" class="btn btn-primary" type="button">＋ Novo cartão</button></div>
+        <div class="section-action"><button id="newCardBtn" class="btn btn-primary">＋ Novo cartão</button></div>
         <div id="cardsGrid" class="cards-grid"></div>
       </section>
 
       <section id="accountsView" class="view">
-        <div class="section-action"><button id="newAccountBtn" class="btn btn-primary" type="button">＋ Nova conta</button></div>
+        <div class="section-action"><button id="newAccountBtn" class="btn btn-primary">＋ Nova conta</button></div>
         <div id="accountsGrid" class="cards-grid"></div>
       </section>
 
       <section id="settingsView" class="view">
         <div class="settings-grid">
           <article class="panel">
-            <div class="panel-head">
-              <div><p class="eyebrow">PERSONALIZE</p><h2>Categorias de despesas</h2></div>
-              <button id="newCategoryBtn" class="btn btn-secondary" type="button">＋ Categoria</button>
-            </div>
+            <div class="panel-head"><div><p class="eyebrow">DESPESAS</p><h2>Categorias</h2></div><button id="newCategoryBtn" class="btn btn-secondary">＋ Criar</button></div>
             <div id="categoriesList" class="simple-list"></div>
           </article>
           <article class="panel">
-            <div class="panel-head">
-              <div><p class="eyebrow">ENTRADAS</p><h2>Fontes de renda</h2></div>
-              <button id="newIncomeSourceBtn" class="btn btn-secondary" type="button">＋ Fonte</button>
-            </div>
+            <div class="panel-head"><div><p class="eyebrow">RECEITAS</p><h2>Fontes de renda</h2></div><button id="newIncomeSourceBtn" class="btn btn-secondary">＋ Criar</button></div>
             <div id="incomeSourcesList" class="simple-list"></div>
           </article>
         </div>
       </section>
     </main>
+
+    <button id="mobileQuickAdd" class="mobile-fab">＋</button>
   </div>
 
-  <button id="mobileQuickAdd" class="mobile-fab" type="button" aria-label="Novo lançamento">＋</button>
-
   <dialog id="transactionModal" class="modal">
-    <form id="transactionForm" class="modal-card wide">
-      <input id="transactionId" type="hidden">
-      <div class="modal-head">
-        <div><p class="eyebrow">LANÇAMENTO RÁPIDO</p><h2 id="transactionModalTitle">Nova despesa</h2></div>
-        <button class="icon-btn" type="button" data-close="transactionModal" aria-label="Fechar">×</button>
-      </div>
-
+    <form id="transactionForm" method="dialog" class="modal-card wide">
+      <div class="modal-head"><div><p class="eyebrow">LANÇAMENTO RÁPIDO</p><h2 id="transactionModalTitle">Nova despesa</h2></div><button type="button" class="icon-btn" data-close="transactionModal">×</button></div>
+      <input type="hidden" id="transactionId" />
       <div class="type-switch">
-        <button class="type-option active" type="button" data-type="expense">Despesa</button>
-        <button class="type-option" type="button" data-type="income">Receita</button>
+        <button type="button" class="type-option active" data-type="expense">Despesa</button>
+        <button type="button" class="type-option" data-type="income">Receita</button>
       </div>
-
-      <label class="quick-amount-label">Valor
-        <div class="quick-amount-wrap"><span>R$</span><input id="transactionAmount" inputmode="decimal" autocomplete="off" placeholder="0,00" required></div>
-      </label>
-
+      <div class="quick-amount-wrap"><span>R$</span><input id="transactionAmount" inputmode="decimal" placeholder="0,00" required /></div>
       <label>O que foi?
-        <input id="transactionDescription" type="text" placeholder="Ex.: Sorvete, mercado, salário..." required>
+        <input id="transactionDescription" type="text" required placeholder="Ex.: Sorvete" />
       </label>
-
       <div id="expenseFields">
-        <div class="form-grid two">
-          <label>Como pagou?
-            <select id="paymentMethod">
-              <option value="pix">PIX</option>
-              <option value="debit">Débito</option>
-              <option value="credit">Crédito</option>
-              <option value="cash">Dinheiro</option>
-              <option value="boleto">Boleto</option>
-              <option value="other">Outro</option>
-            </select>
-          </label>
-          <label>Categoria
-            <select id="transactionCategory"></select>
-          </label>
-        </div>
-        <div id="accountField">
-          <label>Conta / carteira
-            <select id="transactionAccount"></select>
-          </label>
-        </div>
-        <div id="cardField" class="hidden">
-          <label>Cartão
-            <select id="transactionCard"></select>
-          </label>
-        </div>
-        <div id="installmentsField" class="hidden">
-          <label>Parcelas
-            <input id="transactionInstallments" type="number" min="1" max="120" value="1">
-          </label>
-        </div>
+        <label>Como pagou?
+          <select id="paymentMethod">
+            <option value="pix">PIX</option><option value="debit">Débito</option><option value="credit">Crédito</option><option value="cash">Dinheiro</option><option value="boleto">Boleto</option><option value="other">Outro</option>
+          </select>
+        </label>
+        <label id="accountField">Conta
+          <select id="transactionAccount"></select>
+        </label>
+        <label id="cardField" class="hidden">Cartão
+          <select id="transactionCard"></select>
+        </label>
+        <label>Categoria
+          <select id="transactionCategory"></select>
+        </label>
       </div>
-
       <div id="incomeFields" class="hidden">
-        <div class="form-grid two">
-          <label>Fonte de renda
-            <select id="transactionIncomeSource"></select>
-          </label>
-          <label>Receber em
-            <select id="incomeAccount"></select>
-          </label>
-        </div>
+        <label>Fonte de renda
+          <select id="transactionIncomeSource"></select>
+        </label>
+        <label>Conta de recebimento
+          <select id="incomeAccount"></select>
+        </label>
       </div>
-
-      <button id="moreOptionsToggle" class="more-options" type="button">＋ Mais opções</button>
+      <button type="button" id="moreOptionsToggle" class="more-options">Mais opções ▾</button>
       <div id="moreOptions" class="more-options-area hidden">
         <div class="form-grid two">
-          <label>Vencimento / referência
-            <input id="transactionDueDate" type="date" required>
-          </label>
-          <label>Status
-            <select id="transactionStatus">
-              <option value="pending">Pendente</option>
-              <option value="paid">Pago / recebido</option>
-            </select>
-          </label>
+          <label>Data de vencimento / compra<input id="transactionDueDate" type="date" required /></label>
+          <label>Data de pagamento<input id="transactionPaidAt" type="date" /></label>
         </div>
-        <label>Data do pagamento / recebimento
-          <input id="transactionPaidAt" type="date">
-        </label>
-        <label>Observação
-          <textarea id="transactionNotes" rows="3" placeholder="Opcional"></textarea>
-        </label>
+        <div class="form-grid two">
+          <label>Status<select id="transactionStatus"><option value="pending">Pendente</option><option value="paid">Pago / Recebido</option><option value="cancelled">Cancelado</option></select></label>
+          <label id="installmentsField">Parcelas<input id="transactionInstallments" type="number" min="1" max="60" value="1" /></label>
+        </div>
+        <label>Observação<textarea id="transactionNotes" rows="3" placeholder="Opcional"></textarea></label>
       </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-ghost" type="button" data-close="transactionModal">Cancelar</button>
-        <button class="btn btn-primary" type="submit">Salvar lançamento</button>
-      </div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="transactionModal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar lançamento</button></div>
     </form>
   </dialog>
 
   <dialog id="accountModal" class="modal">
-    <form id="accountForm" class="modal-card">
-      <input id="accountId" type="hidden">
-      <div class="modal-head"><div><p class="eyebrow">CONTA</p><h2>Conta ou carteira</h2></div><button class="icon-btn" type="button" data-close="accountModal">×</button></div>
-      <label>Nome<input id="accountName" placeholder="Ex.: Itaú, Mercado Pago, Dinheiro" required></label>
+    <form id="accountForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Conta</h2><button type="button" class="icon-btn" data-close="accountModal">×</button></div>
+      <input type="hidden" id="accountId" />
+      <label>Nome<input id="accountName" required placeholder="Ex.: Itaú" /></label>
       <label>Tipo<select id="accountType"><option value="checking">Conta corrente</option><option value="wallet">Carteira digital</option><option value="cash">Dinheiro</option><option value="savings">Poupança</option><option value="investment">Investimento</option></select></label>
-      <label>Saldo atual<input id="accountBalance" inputmode="decimal" placeholder="0,00" required></label>
-      <div class="modal-actions"><button class="btn btn-ghost" type="button" data-close="accountModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar conta</button></div>
+      <label>Saldo inicial / atual<input id="accountBalance" inputmode="decimal" required placeholder="0,00" /></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="accountModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
     </form>
   </dialog>
 
   <dialog id="cardModal" class="modal">
-    <form id="cardForm" class="modal-card">
-      <input id="cardId" type="hidden">
-      <div class="modal-head"><div><p class="eyebrow">CARTÃO</p><h2>Cartão de crédito</h2></div><button class="icon-btn" type="button" data-close="cardModal">×</button></div>
-      <div class="form-grid two"><label>Nome<input id="cardName" placeholder="Ex.: Cartão Azul" required></label><label>Banco / emissor<input id="cardIssuer" placeholder="Ex.: Itaú"></label></div>
-      <label>Limite total<input id="cardLimit" inputmode="decimal" placeholder="5.000,00" required></label>
-      <div class="form-grid two"><label>Dia de fechamento<input id="cardClosingDay" type="number" min="1" max="31" value="28" required></label><label>Dia de vencimento<input id="cardDueDay" type="number" min="1" max="31" value="7" required></label></div>
-      <label>Conta usada para pagamento<select id="cardPaymentAccount"></select></label>
-      <div class="modal-actions"><button class="btn btn-ghost" type="button" data-close="cardModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar cartão</button></div>
+    <form id="cardForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Cartão</h2><button type="button" class="icon-btn" data-close="cardModal">×</button></div>
+      <input type="hidden" id="cardId" />
+      <label>Nome do cartão<input id="cardName" required placeholder="Ex.: Azul" /></label>
+      <label>Banco / emissor<input id="cardIssuer" placeholder="Ex.: Itaú" /></label>
+      <label>Limite total<input id="cardLimit" inputmode="decimal" required placeholder="5000,00" /></label>
+      <div class="form-grid two"><label>Fechamento<input id="cardClosingDay" type="number" min="1" max="31" value="28" /></label><label>Vencimento<input id="cardDueDay" type="number" min="1" max="31" value="7" /></label></div>
+      <label>Conta usada para pagar<select id="cardPaymentAccount"></select></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="cardModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
     </form>
   </dialog>
 
   <dialog id="categoryModal" class="modal">
-    <form id="categoryForm" class="modal-card">
-      <input id="categoryId" type="hidden">
-      <div class="modal-head"><div><p class="eyebrow">CATEGORIA</p><h2>Tipo de despesa</h2></div><button class="icon-btn" type="button" data-close="categoryModal">×</button></div>
-      <div class="form-grid two"><label>Nome<input id="categoryName" placeholder="Ex.: Alimentação" required></label><label>Ícone<input id="categoryIcon" placeholder="🍔" maxlength="8"></label></div>
+    <form id="categoryForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Categoria de despesa</h2><button type="button" class="icon-btn" data-close="categoryModal">×</button></div>
+      <input type="hidden" id="categoryId" />
+      <label>Nome<input id="categoryName" required placeholder="Ex.: Alimentação" /></label>
       <label>Grupo<select id="categoryGroup"><option value="essential">Essencial</option><option value="nonessential">Não essencial</option><option value="leisure">Lazer</option><option value="debt">Dívida</option><option value="investment">Investimento</option><option value="subscription">Assinatura</option><option value="other">Outro</option></select></label>
-      <div class="modal-actions"><button class="btn btn-ghost" type="button" data-close="categoryModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar categoria</button></div>
+      <label>Ícone / emoji<input id="categoryIcon" maxlength="4" placeholder="🍔" /></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="categoryModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
     </form>
   </dialog>
 
   <dialog id="incomeSourceModal" class="modal">
-    <form id="incomeSourceForm" class="modal-card">
-      <input id="incomeSourceId" type="hidden">
-      <div class="modal-head"><div><p class="eyebrow">RENDA</p><h2>Fonte de renda</h2></div><button class="icon-btn" type="button" data-close="incomeSourceModal">×</button></div>
-      <label>Nome<input id="incomeSourceName" placeholder="Ex.: Salário, comissão, freelance" required></label>
+    <form id="incomeSourceForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Fonte de renda</h2><button type="button" class="icon-btn" data-close="incomeSourceModal">×</button></div>
+      <input type="hidden" id="incomeSourceId" />
+      <label>Nome<input id="incomeSourceName" required placeholder="Ex.: Salário" /></label>
       <label>Tipo<select id="incomeSourceType"><option value="recurring">Recorrente</option><option value="variable">Variável</option><option value="sale">Venda</option><option value="refund">Reembolso</option><option value="other">Outro</option></select></label>
-      <div class="form-grid two"><label>Valor padrão<input id="incomeSourceDefaultAmount" inputmode="decimal" placeholder="Opcional"></label><label>Dia esperado<input id="incomeSourceDay" type="number" min="1" max="31" placeholder="Ex.: 5"></label></div>
-      <div class="modal-actions"><button class="btn btn-ghost" type="button" data-close="incomeSourceModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar fonte</button></div>
+      <label>Valor padrão (opcional)<input id="incomeSourceDefaultAmount" inputmode="decimal" placeholder="0,00" /></label>
+      <label>Dia previsto (opcional)<input id="incomeSourceDay" type="number" min="1" max="31" placeholder="5" /></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="incomeSourceModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
     </form>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase-config.js"></script>
-  <script src="js/app.js"></script>
+  <script src="supabase-config.js?v=3.0"></script>
+  <script src="app.js?v=3.0"></script>
 </body>
 </html>
