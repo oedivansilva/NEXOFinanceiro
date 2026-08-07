@@ -128,7 +128,7 @@ function byId(list, id) { return list.find(x => x.id === id); }
 
 async function init() {
   if (!window.SUPABASE_URL || window.SUPABASE_URL.includes('SEU-PROJETO')) {
-    alert('Configure js/supabase-config.js com a URL e a chave pública do Supabase.');
+    alert('Configure supabase-config.js com a URL e a chave pública do Supabase.');
     return;
   }
 
@@ -143,12 +143,26 @@ async function init() {
   $('transactionDueDate').value = isoToday();
 
   wireEvents();
+
+  // Carrega os dados UMA vez e já libera a interface.
   await loadData();
-  await ensureDefaults();
-  await loadData();
-  await syncCardInvoices();
-  await loadData();
+  const defaultsCreated = await ensureDefaults();
+  if (defaultsCreated) await loadData();
   renderAll();
+
+  // A sincronização das faturas roda em segundo plano.
+  // Assim ela não segura a abertura do sistema.
+  setTimeout(async () => {
+    try {
+      const changed = await syncCardInvoices();
+      if (changed) {
+        await loadData();
+        renderAll();
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar faturas em segundo plano:', error);
+    }
+  }, 0);
 }
 
 async function loadData() {
@@ -183,9 +197,13 @@ async function syncCardInvoices() {
     t.card_id &&
     t.status !== 'cancelled'
   );
-  if (!creditTransactions.length || !state.cards.length) return;
 
-  const invoiceKeys = new Map();
+  if (!creditTransactions.length || !state.cards.length) return false;
+
+  let changed = false;
+
+  // Calcula apenas as faturas realmente necessárias.
+  const expectedInvoicePayloads = new Map();
 
   for (const t of creditTransactions) {
     const card = byId(state.cards, t.card_id);
@@ -197,8 +215,8 @@ async function syncCardInvoices() {
     const expectedDue = addMonths(firstDue, installmentIndex);
     const key = `${card.id}|${expectedDue}`;
 
-    if (!invoiceKeys.has(key)) {
-      invoiceKeys.set(key, {
+    if (!expectedInvoicePayloads.has(key)) {
+      expectedInvoicePayloads.set(key, {
         user_id: uid(),
         card_id: card.id,
         due_date: expectedDue,
@@ -207,47 +225,99 @@ async function syncCardInvoices() {
     }
   }
 
-  const invoicePayload = [...invoiceKeys.values()];
-  if (invoicePayload.length) {
+  // Não regrava faturas que já existem.
+  const currentInvoiceKeys = new Set(
+    state.invoices.map(i => `${i.card_id}|${i.due_date}`)
+  );
+
+  const missingInvoices = [...expectedInvoicePayloads.entries()]
+    .filter(([key]) => !currentInvoiceKeys.has(key))
+    .map(([, payload]) => payload);
+
+  if (missingInvoices.length) {
     const { error } = await sb.from('card_invoices')
-      .upsert(invoicePayload, { onConflict:'card_id,due_date', ignoreDuplicates:false });
+      .upsert(missingInvoices, { onConflict:'card_id,due_date', ignoreDuplicates:true });
+
     if (error) {
-      console.error('Não foi possível sincronizar faturas:', error);
-      return;
+      console.error('Não foi possível criar as faturas necessárias:', error);
+      return false;
     }
+
+    changed = true;
   }
 
-  const { data: invoices, error: invoiceError } = await sb.from('card_invoices')
-    .select('*').eq('user_id',uid());
-  if (invoiceError) {
-    console.error(invoiceError);
-    return;
+  // Só busca as faturas novamente se alguma precisou ser criada.
+  let invoices = state.invoices;
+
+  if (missingInvoices.length) {
+    const { data, error } = await sb.from('card_invoices')
+      .select('*')
+      .eq('user_id', uid());
+
+    if (error) {
+      console.error('Erro ao recarregar faturas:', error);
+      return changed;
+    }
+
+    invoices = data || [];
   }
 
-  const invoiceMap = new Map((invoices||[]).map(i => [`${i.card_id}|${i.due_date}`, i]));
+  const invoiceMap = new Map(
+    invoices.map(i => [`${i.card_id}|${i.due_date}`, i])
+  );
+
+  // Atualiza SOMENTE lançamentos que realmente estejam divergentes.
+  const updates = [];
 
   for (const t of creditTransactions) {
     const card = byId(state.cards, t.card_id);
     if (!card) continue;
+
     const purchaseDate = t.purchase_date || t.due_date || isoToday();
     const firstDue = firstCardDueDate(purchaseDate, card.closing_day, card.due_day);
-    const expectedDue = addMonths(firstDue, Math.max(1,Number(t.installment_number||1))-1);
+    const expectedDue = addMonths(
+      firstDue,
+      Math.max(1, Number(t.installment_number || 1)) - 1
+    );
+
     const invoice = invoiceMap.get(`${card.id}|${expectedDue}`);
     if (!invoice) continue;
 
-    const payload = { invoice_id:invoice.id };
+    const payload = {};
+
+    if (t.invoice_id !== invoice.id) payload.invoice_id = invoice.id;
     if (t.due_date !== expectedDue) payload.due_date = expectedDue;
     if (!t.purchase_date) payload.purchase_date = purchaseDate;
 
-    const { error } = await sb.from('transactions').update(payload)
-      .eq('id',t.id).eq('user_id',uid());
-    if (error) console.error('Erro ao vincular lançamento à fatura:',error);
+    if (!Object.keys(payload).length) continue;
+
+    updates.push(
+      sb.from('transactions')
+        .update(payload)
+        .eq('id', t.id)
+        .eq('user_id', uid())
+    );
   }
+
+  if (updates.length) {
+    const results = await Promise.all(updates);
+    const errors = results.map(r => r.error).filter(Boolean);
+
+    if (errors.length) {
+      console.error('Alguns lançamentos não puderam ser sincronizados:', errors);
+    }
+
+    if (errors.length < updates.length) changed = true;
+  }
+
+  return changed;
 }
 
 async function ensureDefaults() {
+  let created = false;
+
   if (!state.categories.length) {
-    await sb.from('categories').insert([
+    const { error } = await sb.from('categories').insert([
       { user_id: uid(), name: 'Alimentação', group_name: 'essential', icon: '🍔' },
       { user_id: uid(), name: 'Transporte', group_name: 'essential', icon: '🚗' },
       { user_id: uid(), name: 'Educação', group_name: 'essential', icon: '🎓' },
@@ -257,13 +327,20 @@ async function ensureDefaults() {
       { user_id: uid(), name: 'Saúde', group_name: 'essential', icon: '❤️' },
       { user_id: uid(), name: 'Outros', group_name: 'other', icon: '🏷️' }
     ]);
+    if (!error) created = true;
+    else console.error('Erro ao criar categorias padrão:', error);
   }
+
   if (!state.incomeSources.length) {
-    await sb.from('income_sources').insert([
+    const { error } = await sb.from('income_sources').insert([
       { user_id: uid(), name: 'Salário', source_type: 'recurring' },
       { user_id: uid(), name: 'Outros', source_type: 'other' }
     ]);
+    if (!error) created = true;
+    else console.error('Erro ao criar fontes de renda padrão:', error);
   }
+
+  return created;
 }
 
 function renderAll() {
@@ -772,9 +849,16 @@ async function saveTransaction(e) {
   }
 
   $('transactionModal').close();
+
+  // Atualiza a tela sem repetir várias leituras desnecessárias.
   await loadData();
-  if (method === 'credit') await syncCardInvoices();
-  await refresh();
+
+  if (method === 'credit') {
+    const changed = await syncCardInvoices();
+    if (changed) await loadData();
+  }
+
+  renderAll();
 }
 
 async function applyBalanceForTransaction(t, direction=1) {
@@ -829,7 +913,34 @@ function openCard(id='') {
   if(id){const c=byId(state.cards,id);$('cardName').value=c.name;$('cardIssuer').value=c.issuer||'';$('cardLimit').value=Number(c.credit_limit).toFixed(2).replace('.',',');$('cardClosingDay').value=c.closing_day;$('cardDueDay').value=c.due_day;$('cardPaymentAccount').value=c.payment_account_id||'';}
   $('cardModal').showModal();
 }
-async function saveCard(e){e.preventDefault();const id=$('cardId').value;const payload={user_id:uid(),name:$('cardName').value.trim(),issuer:$('cardIssuer').value.trim()||null,credit_limit:parseMoney($('cardLimit').value),closing_day:Number($('cardClosingDay').value),due_day:Number($('cardDueDay').value),payment_account_id:$('cardPaymentAccount').value||null};const q=id?sb.from('cards').update(payload).eq('id',id).eq('user_id',uid()):sb.from('cards').insert(payload);const{error}=await q;if(error)return alert(error.message);$('cardModal').close();await refresh();}
+async function saveCard(e){
+  e.preventDefault();
+  const id=$('cardId').value;
+  const payload={
+    user_id:uid(),
+    name:$('cardName').value.trim(),
+    issuer:$('cardIssuer').value.trim()||null,
+    credit_limit:parseMoney($('cardLimit').value),
+    closing_day:Number($('cardClosingDay').value),
+    due_day:Number($('cardDueDay').value),
+    payment_account_id:$('cardPaymentAccount').value||null
+  };
+
+  const q=id
+    ? sb.from('cards').update(payload).eq('id',id).eq('user_id',uid())
+    : sb.from('cards').insert(payload);
+
+  const {error}=await q;
+  if(error)return alert(error.message);
+
+  $('cardModal').close();
+
+  // Alteração de fechamento/vencimento pode exigir recalcular faturas.
+  await loadData();
+  const changed = await syncCardInvoices();
+  if (changed) await loadData();
+  renderAll();
+}
 
 function openCategory(id=''){ $('categoryForm').reset();$('categoryId').value=id;if(id){const c=byId(state.categories,id);$('categoryName').value=c.name;$('categoryGroup').value=c.group_name;$('categoryIcon').value=c.icon||'';}$('categoryModal').showModal();}
 async function saveCategory(e){e.preventDefault();const id=$('categoryId').value;const payload={user_id:uid(),name:$('categoryName').value.trim(),group_name:$('categoryGroup').value,icon:$('categoryIcon').value.trim()||null};const q=id?sb.from('categories').update(payload).eq('id',id).eq('user_id',uid()):sb.from('categories').insert(payload);const{error}=await q;if(error)return alert(error.message);$('categoryModal').close();await refresh();}
@@ -837,6 +948,9 @@ async function saveCategory(e){e.preventDefault();const id=$('categoryId').value
 function openIncomeSource(id=''){ $('incomeSourceForm').reset();$('incomeSourceId').value=id;if(id){const s=byId(state.incomeSources,id);$('incomeSourceName').value=s.name;$('incomeSourceType').value=s.source_type;$('incomeSourceDefaultAmount').value=s.default_amount?Number(s.default_amount).toFixed(2).replace('.',','):'';$('incomeSourceDay').value=s.expected_day||'';}$('incomeSourceModal').showModal();}
 async function saveIncomeSource(e){e.preventDefault();const id=$('incomeSourceId').value;const amt=parseMoney($('incomeSourceDefaultAmount').value);const payload={user_id:uid(),name:$('incomeSourceName').value.trim(),source_type:$('incomeSourceType').value,default_amount:amt||null,expected_day:$('incomeSourceDay').value?Number($('incomeSourceDay').value):null};const q=id?sb.from('income_sources').update(payload).eq('id',id).eq('user_id',uid()):sb.from('income_sources').insert(payload);const{error}=await q;if(error)return alert(error.message);$('incomeSourceModal').close();await refresh();}
 
-async function refresh(){await loadData();await syncCardInvoices();await loadData();renderAll();}
+async function refresh(){
+  await loadData();
+  renderAll();
+}
 
 init();
