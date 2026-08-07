@@ -25,25 +25,53 @@ document.querySelectorAll('.auth-tab').forEach(btn => {
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   showMessage('Entrando...', 'info');
+
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
+
   const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) return showMessage(error.message);
+
+  if (error) {
+    if (error.message?.toLowerCase().includes('invalid login credentials')) {
+      return showMessage('E-mail ou senha incorretos.');
+    }
+    return showMessage(error.message);
+  }
+
   window.location.href = 'app.html';
 });
 
 document.getElementById('signupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   showMessage('Criando sua conta...', 'info');
+
   const name = document.getElementById('signupName').value.trim();
   const email = document.getElementById('signupEmail').value.trim();
   const password = document.getElementById('signupPassword').value;
+
   const { data, error } = await sb.auth.signUp({
     email,
     password,
-    options: { data: { full_name: name } }
+    options: {
+      data: { full_name: name }
+    }
   });
-  if (error) return showMessage(error.message);
-  if (data.session) window.location.href = 'app.html';
-  else showMessage('Conta criada. Confira seu e-mail para confirmar o cadastro.', 'success');
+
+  if (error) {
+    if (error.message?.toLowerCase().includes('already registered')) {
+      return showMessage('Este e-mail já possui uma conta. Use a opção Entrar.');
+    }
+    return showMessage(error.message);
+  }
+
+  if (data.session) {
+    showMessage('Conta criada com sucesso! Entrando...', 'success');
+    setTimeout(() => {
+      window.location.href = 'app.html';
+    }, 350);
+    return;
+  }
+
+  // Se chegar aqui, a confirmação de e-mail ainda está ativa no projeto Supabase.
+  showMessage('O cadastro foi criado, mas o Supabase ainda está exigindo confirmação de e-mail.', 'error');
 });
