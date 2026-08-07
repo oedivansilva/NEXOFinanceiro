@@ -8,6 +8,8 @@ const state = {
   categories: [],
   incomeSources: [],
   transactions: [],
+  invoices: [],
+  invoicePayments: [],
   selectedMonth: '',
   transactionType: 'expense'
 };
@@ -29,6 +31,39 @@ const parseMoney = (value) => {
 const escapeHtml = (s='') => String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));
 const fmtDate = (date) => date ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 const uid = () => state.user?.id;
+
+const monthLabel = (month) => {
+  if (!month) return '—';
+  const [y,m] = month.split('-').map(Number);
+  return new Date(y, m-1, 1, 12).toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+};
+
+function invoiceTotal(invoiceId) {
+  return state.transactions
+    .filter(t => t.invoice_id === invoiceId && t.payment_method === 'credit' && t.status !== 'cancelled')
+    .reduce((s,t)=>s+Number(t.amount||0),0);
+}
+
+function invoiceOutstanding(invoice) {
+  return Math.max(0, invoiceTotal(invoice.id) - Number(invoice.amount_paid || 0));
+}
+
+function invoiceComputedStatus(invoice) {
+  const total = invoiceTotal(invoice.id);
+  const paid = Number(invoice.amount_paid || 0);
+  if (total > 0 && paid >= total - 0.009) return 'paid';
+  if (paid > 0) return 'partial';
+  if (invoice.due_date < isoToday()) return 'overdue';
+  return 'open';
+}
+
+function invoiceStatusLabel(invoice) {
+  return {paid:'Paga',partial:'Parcial',overdue:'Atrasada',open:'Em aberto'}[invoiceComputedStatus(invoice)] || 'Em aberto';
+}
+
+function invoiceForTransaction(t) {
+  return t.invoice_id ? state.invoices.find(i => i.id === t.invoice_id) : null;
+}
 
 function monthRange(month) {
   const [y, m] = month.split('-').map(Number);
@@ -74,12 +109,18 @@ function firstCardDueDate(purchaseDate, closingDay, dueDay) {
 function statusOf(t) {
   if (t.status === 'cancelled') return 'cancelled';
   if (t.status === 'paid') return 'paid';
+  if (t.type === 'expense' && t.payment_method === 'credit') return 'invoice';
   if (t.due_date < isoToday()) return 'overdue';
   return 'pending';
 }
 
 function statusLabel(t) {
   const s = statusOf(t);
+  if (s === 'invoice') {
+    const inv = invoiceForTransaction(t);
+    if (inv && Number(inv.amount_paid || 0) > 0) return 'Fatura parcial';
+    return 'Na fatura';
+  }
   return { paid:'Pago', pending:'Pendente', overdue:'Atrasado', cancelled:'Cancelado' }[s];
 }
 
@@ -105,20 +146,24 @@ async function init() {
   await loadData();
   await ensureDefaults();
   await loadData();
+  await syncCardInvoices();
+  await loadData();
   renderAll();
 }
 
 async function loadData() {
-  const [profile, accounts, cards, categories, incomeSources, transactions] = await Promise.all([
+  const [profile, accounts, cards, categories, incomeSources, transactions, invoices, invoicePayments] = await Promise.all([
     sb.from('profiles').select('*').eq('id', uid()).maybeSingle(),
     sb.from('accounts').select('*').eq('user_id', uid()).eq('is_active', true).order('created_at'),
     sb.from('cards').select('*').eq('user_id', uid()).eq('is_active', true).order('created_at'),
     sb.from('categories').select('*').eq('user_id', uid()).eq('is_active', true).order('name'),
     sb.from('income_sources').select('*').eq('user_id', uid()).eq('is_active', true).order('name'),
-    sb.from('transactions').select('*').eq('user_id', uid()).order('due_date', { ascending: false }).limit(1000)
+    sb.from('transactions').select('*').eq('user_id', uid()).order('due_date', { ascending: false }).limit(2000),
+    sb.from('card_invoices').select('*').eq('user_id', uid()).order('due_date', { ascending: false }).limit(500),
+    sb.from('card_invoice_payments').select('*').eq('user_id', uid()).order('paid_at', { ascending: false }).limit(1000)
   ]);
 
-  const errors = [profile, accounts, cards, categories, incomeSources, transactions].map(r => r.error).filter(Boolean);
+  const errors = [profile, accounts, cards, categories, incomeSources, transactions, invoices, invoicePayments].map(r => r.error).filter(Boolean);
   if (errors.length) console.error(errors);
 
   state.profile = profile.data || null;
@@ -127,6 +172,77 @@ async function loadData() {
   state.categories = categories.data || [];
   state.incomeSources = incomeSources.data || [];
   state.transactions = transactions.data || [];
+  state.invoices = invoices.data || [];
+  state.invoicePayments = invoicePayments.data || [];
+}
+
+async function syncCardInvoices() {
+  const creditTransactions = state.transactions.filter(t =>
+    t.type === 'expense' &&
+    t.payment_method === 'credit' &&
+    t.card_id &&
+    t.status !== 'cancelled'
+  );
+  if (!creditTransactions.length || !state.cards.length) return;
+
+  const invoiceKeys = new Map();
+
+  for (const t of creditTransactions) {
+    const card = byId(state.cards, t.card_id);
+    if (!card) continue;
+
+    const purchaseDate = t.purchase_date || t.due_date || isoToday();
+    const installmentIndex = Math.max(1, Number(t.installment_number || 1)) - 1;
+    const firstDue = firstCardDueDate(purchaseDate, card.closing_day, card.due_day);
+    const expectedDue = addMonths(firstDue, installmentIndex);
+    const key = `${card.id}|${expectedDue}`;
+
+    if (!invoiceKeys.has(key)) {
+      invoiceKeys.set(key, {
+        user_id: uid(),
+        card_id: card.id,
+        due_date: expectedDue,
+        reference_month: `${expectedDue.slice(0,7)}-01`
+      });
+    }
+  }
+
+  const invoicePayload = [...invoiceKeys.values()];
+  if (invoicePayload.length) {
+    const { error } = await sb.from('card_invoices')
+      .upsert(invoicePayload, { onConflict:'card_id,due_date', ignoreDuplicates:false });
+    if (error) {
+      console.error('Não foi possível sincronizar faturas:', error);
+      return;
+    }
+  }
+
+  const { data: invoices, error: invoiceError } = await sb.from('card_invoices')
+    .select('*').eq('user_id',uid());
+  if (invoiceError) {
+    console.error(invoiceError);
+    return;
+  }
+
+  const invoiceMap = new Map((invoices||[]).map(i => [`${i.card_id}|${i.due_date}`, i]));
+
+  for (const t of creditTransactions) {
+    const card = byId(state.cards, t.card_id);
+    if (!card) continue;
+    const purchaseDate = t.purchase_date || t.due_date || isoToday();
+    const firstDue = firstCardDueDate(purchaseDate, card.closing_day, card.due_day);
+    const expectedDue = addMonths(firstDue, Math.max(1,Number(t.installment_number||1))-1);
+    const invoice = invoiceMap.get(`${card.id}|${expectedDue}`);
+    if (!invoice) continue;
+
+    const payload = { invoice_id:invoice.id };
+    if (t.due_date !== expectedDue) payload.due_date = expectedDue;
+    if (!t.purchase_date) payload.purchase_date = purchaseDate;
+
+    const { error } = await sb.from('transactions').update(payload)
+      .eq('id',t.id).eq('user_id',uid());
+    if (error) console.error('Erro ao vincular lançamento à fatura:',error);
+  }
 }
 
 async function ensureDefaults() {
@@ -168,7 +284,7 @@ function renderUser() {
 
 function fillSelects() {
   const accountOptions = `<option value="">Selecione</option>` + state.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
-  ['transactionAccount','incomeAccount','cardPaymentAccount'].forEach(id => $(id).innerHTML = accountOptions);
+  ['transactionAccount','incomeAccount','cardPaymentAccount','invoicePaymentAccount'].forEach(id => $(id).innerHTML = accountOptions);
   $('transactionCard').innerHTML = `<option value="">Selecione</option>` + state.cards.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   $('transactionCategory').innerHTML = `<option value="">Selecione</option>` + state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.icon || '')} ${escapeHtml(c.name)}</option>`).join('');
   $('transactionIncomeSource').innerHTML = `<option value="">Selecione</option>` + state.incomeSources.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
@@ -179,13 +295,32 @@ function monthTransactions() {
   return state.transactions.filter(t => t.due_date >= start && t.due_date <= end && t.status !== 'cancelled');
 }
 
+function purchaseMonthTransactions() {
+  const { start, end } = monthRange(state.selectedMonth);
+  return state.transactions.filter(t => {
+    const date = t.purchase_date || t.due_date;
+    return date >= start && date <= end && t.status !== 'cancelled';
+  });
+}
+
+function invoicesInMonth(month = state.selectedMonth) {
+  const { start, end } = monthRange(month);
+  return state.invoices.filter(i => i.due_date >= start && i.due_date <= end && invoiceTotal(i.id) > 0);
+}
+
 function renderDashboard() {
   const monthTx = monthTransactions();
+  const monthInvoices = invoicesInMonth();
   const balance = state.accounts.reduce((s,a) => s + Number(a.balance), 0);
   const income = monthTx.filter(t => t.type === 'income').reduce((s,t)=>s+Number(t.amount),0);
   const expense = monthTx.filter(t => t.type === 'expense').reduce((s,t)=>s+Number(t.amount),0);
   const pendingIncome = monthTx.filter(t => t.type === 'income' && t.status !== 'paid').reduce((s,t)=>s+Number(t.amount),0);
-  const pendingExpense = monthTx.filter(t => t.type === 'expense' && t.status !== 'paid').reduce((s,t)=>s+Number(t.amount),0);
+
+  const regularPendingExpense = monthTx
+    .filter(t => t.type === 'expense' && t.payment_method !== 'credit' && t.status !== 'paid')
+    .reduce((s,t)=>s+Number(t.amount),0);
+  const invoicePendingExpense = monthInvoices.reduce((s,i)=>s+invoiceOutstanding(i),0);
+  const pendingExpense = regularPendingExpense + invoicePendingExpense;
   const projected = balance + pendingIncome - pendingExpense;
 
   $('balanceTotal').textContent = money(balance);
@@ -193,21 +328,53 @@ function renderDashboard() {
   $('expenseMonth').textContent = money(expense);
   $('projectedBalance').textContent = money(projected);
 
-  const upcoming = state.transactions
-    .filter(t => t.type === 'expense' && t.status === 'pending' && t.status !== 'cancelled')
-    .sort((a,b)=>a.due_date.localeCompare(b.due_date)).slice(0,6);
+  const regularUpcoming = state.transactions
+    .filter(t => t.type === 'expense' && t.payment_method !== 'credit' && t.status === 'pending')
+    .map(t => ({ kind:'transaction', due_date:t.due_date, item:t }));
+
+  const invoiceUpcoming = state.invoices
+    .filter(i => invoiceTotal(i.id) > 0 && invoiceOutstanding(i) > 0)
+    .map(i => ({ kind:'invoice', due_date:i.due_date, item:i }));
+
+  const upcoming = [...regularUpcoming, ...invoiceUpcoming]
+    .sort((a,b)=>a.due_date.localeCompare(b.due_date))
+    .slice(0,6);
+
   $('upcomingList').classList.toggle('empty-state', !upcoming.length);
-  $('upcomingList').innerHTML = upcoming.length ? upcoming.map(t => `
-    <div class="list-item">
+  $('upcomingList').innerHTML = upcoming.length ? upcoming.map(row => {
+    if (row.kind === 'invoice') {
+      const inv = row.item;
+      const card = byId(state.cards, inv.card_id);
+      return `<div class="list-item">
+        <div class="list-item-main">
+          <div class="list-item-title">💳 Fatura ${escapeHtml(card?.name || 'Cartão')}</div>
+          <div class="list-item-sub">Vence ${fmtDate(inv.due_date)} · ${monthLabel(inv.due_date.slice(0,7))}</div>
+        </div>
+        <div>
+          <div class="amount-expense">${money(invoiceOutstanding(inv))}</div>
+          <span class="status-badge invoice-status-${invoiceComputedStatus(inv)}">${invoiceStatusLabel(inv)}</span>
+        </div>
+      </div>`;
+    }
+    const t = row.item;
+    return `<div class="list-item">
       <div class="list-item-main"><div class="list-item-title">${escapeHtml(t.description)}</div><div class="list-item-sub">Vence ${fmtDate(t.due_date)} · ${paymentLabel(t)}</div></div>
       <div><div class="amount-expense">${money(t.amount)}</div><span class="status-badge status-${statusOf(t)}">${statusLabel(t)}</span></div>
-    </div>`).join('') : 'Nenhuma conta pendente.';
+    </div>`;
+  }).join('') : 'Nenhuma conta pendente.';
 
   const cardInfo = getCardsWithUsage();
   $('dashboardCards').classList.toggle('empty-state', !cardInfo.length);
   $('dashboardCards').innerHTML = cardInfo.length ? cardInfo.map(c => {
     const pct = c.limit ? Math.min(100, (c.used / c.limit) * 100) : 0;
-    return `<div class="list-item"><div class="list-item-main" style="width:100%"><div class="list-item-title">💳 ${escapeHtml(c.name)}</div><div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div><div class="list-item-sub">Usado ${money(c.used)} · Disponível ${money(c.available)}</div></div></div>`;
+    const selectedInvoice = state.invoices.find(i => i.card_id === c.id && i.due_date.startsWith(state.selectedMonth) && invoiceTotal(i.id) > 0);
+    return `<div class="list-item">
+      <div class="list-item-main" style="width:100%">
+        <div class="list-item-title">💳 ${escapeHtml(c.name)}</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="list-item-sub">Usado ${money(c.used)} · Disponível ${money(c.available)}${selectedInvoice ? ` · Fatura ${money(invoiceOutstanding(selectedInvoice))}`:''}</div>
+      </div>
+    </div>`;
   }).join('') : 'Nenhum cartão cadastrado.';
 
   const recent = [...state.transactions].sort((a,b)=> (b.created_at || '').localeCompare(a.created_at || '')).slice(0,7);
@@ -216,7 +383,11 @@ function renderDashboard() {
 
 function paymentLabel(t) {
   if (t.type === 'income') return byId(state.accounts, t.account_id)?.name || 'Receita';
-  if (t.payment_method === 'credit') return byId(state.cards, t.card_id)?.name || 'Crédito';
+  if (t.payment_method === 'credit') {
+    const card = byId(state.cards, t.card_id);
+    const inv = invoiceForTransaction(t);
+    return `${card?.name || 'Crédito'}${inv ? ` · Fatura ${inv.due_date.slice(0,7).split('-').reverse().join('/')}` : ''}`;
+  }
   return byId(state.accounts, t.account_id)?.name || ({pix:'PIX',debit:'Débito',cash:'Dinheiro',boleto:'Boleto',other:'Outro'}[t.payment_method] || '—');
 }
 
@@ -233,7 +404,13 @@ function tableTransactions(items, actions=true) {
       <td>${escapeHtml(paymentLabel(t))}</td>
       <td><span class="status-badge status-${statusOf(t)}">${statusLabel(t)}</span></td>
       <td class="${t.type==='expense'?'amount-expense':'amount-income'}">${t.type==='expense'?'−':'+'} ${money(t.amount)}</td>
-      ${actions ? `<td><div class="table-actions">${t.status==='pending'?`<button class="mini-btn success" data-pay="${t.id}">${t.type==='expense'?'Marcar pago':'Recebido'}</button><button class="mini-btn danger" data-cancel="${t.id}">Cancelar</button>`:''}</div></td>`:''}
+      ${actions ? `<td><div class="table-actions">${
+        t.status==='pending'
+          ? (t.payment_method==='credit'
+              ? `<button class="mini-btn" data-open-invoice="${t.invoice_id || ''}">Ver fatura</button><button class="mini-btn danger" data-cancel="${t.id}">Cancelar</button>`
+              : `<button class="mini-btn success" data-pay="${t.id}">${t.type==='expense'?'Marcar pago':'Recebido'}</button><button class="mini-btn danger" data-cancel="${t.id}">Cancelar</button>`)
+          : ''
+      }</div></td>`:''}
     </tr>`;
   }).join('') + '</tbody></table>';
 }
@@ -241,7 +418,7 @@ function tableTransactions(items, actions=true) {
 function renderTransactions() {
   const typeFilter = $('transactionTypeFilter').value || 'all';
   const statusFilter = $('transactionStatusFilter').value || 'all';
-  let items = monthTransactions();
+  let items = purchaseMonthTransactions();
   if (typeFilter !== 'all') items = items.filter(t => t.type === typeFilter);
   if (statusFilter !== 'all') items = items.filter(t => statusOf(t) === statusFilter);
   items.sort((a,b)=>b.due_date.localeCompare(a.due_date));
@@ -250,9 +427,17 @@ function renderTransactions() {
 
 function renderPlanning() {
   const items = monthTransactions();
+  const monthInvoices = invoicesInMonth();
   const income = items.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0);
   const expenses = items.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0);
-  const realized = items.filter(t=>t.status==='paid').reduce((s,t)=>s + (t.type==='income'?Number(t.amount):-Number(t.amount)),0);
+
+  const receivedIncome = items.filter(t=>t.type==='income' && t.status==='paid').reduce((s,t)=>s+Number(t.amount),0);
+  const paidRegularExpenses = items
+    .filter(t=>t.type==='expense' && t.payment_method!=='credit' && t.status==='paid')
+    .reduce((s,t)=>s+Number(t.amount),0);
+  const paidInvoices = monthInvoices.reduce((s,i)=>s+Math.min(Number(i.amount_paid||0),invoiceTotal(i.id)),0);
+  const realized = receivedIncome - paidRegularExpenses - paidInvoices;
+
   $('planningIncome').textContent = money(income);
   $('planningExpenses').textContent = money(expenses);
   $('planningPaid').textContent = money(realized);
@@ -262,9 +447,17 @@ function renderPlanning() {
 
 function getCardsWithUsage() {
   return state.cards.map(c => {
-    const used = state.transactions
-      .filter(t => t.type==='expense' && t.payment_method==='credit' && t.card_id===c.id && t.status==='pending')
-      .reduce((s,t)=>s+Number(t.amount),0);
+    const pendingTx = state.transactions.filter(t =>
+      t.type==='expense' &&
+      t.payment_method==='credit' &&
+      t.card_id===c.id &&
+      t.status==='pending'
+    );
+    const pendingTotal = pendingTx.reduce((s,t)=>s+Number(t.amount),0);
+    const partialReleased = state.invoices
+      .filter(i => i.card_id===c.id && invoiceComputedStatus(i)==='partial')
+      .reduce((s,i)=>s+Number(i.amount_paid||0),0);
+    const used = Math.max(0, pendingTotal - partialReleased);
     const limit = Number(c.credit_limit || 0);
     return { ...c, limit, used, available: Math.max(0, limit-used) };
   });
@@ -275,7 +468,34 @@ function renderCards() {
   $('cardsGrid').innerHTML = info.length ? info.map(c => {
     const pct = c.limit ? Math.min(100,(c.used/c.limit)*100) : 0;
     const account = byId(state.accounts, c.payment_account_id);
-    return `<article class="entity-card">
+    const selectedInvoice = state.invoices.find(i => i.card_id===c.id && i.due_date.startsWith(state.selectedMonth) && invoiceTotal(i.id) > 0);
+    const futureInvoices = state.invoices
+      .filter(i => i.card_id===c.id && i.due_date > monthRange(state.selectedMonth).end && invoiceTotal(i.id) > 0)
+      .sort((a,b)=>a.due_date.localeCompare(b.due_date));
+    const nextInvoice = futureInvoices[0] || null;
+
+    const invoiceBlock = selectedInvoice ? `
+      <div class="invoice-box">
+        <div class="invoice-box-head">
+          <div>
+            <span class="invoice-kicker">FATURA ${state.selectedMonth.split('-').reverse().join('/')}</span>
+            <strong>${money(invoiceTotal(selectedInvoice.id))}</strong>
+            <small>Vence ${fmtDate(selectedInvoice.due_date)}</small>
+          </div>
+          <span class="status-badge invoice-status-${invoiceComputedStatus(selectedInvoice)}">${invoiceStatusLabel(selectedInvoice)}</span>
+        </div>
+        <div class="invoice-progress-row"><span>Pago</span><strong>${money(selectedInvoice.amount_paid||0)}</strong></div>
+        <div class="invoice-progress-row"><span>Restante</span><strong>${money(invoiceOutstanding(selectedInvoice))}</strong></div>
+        <div class="invoice-actions">
+          <button class="mini-btn" data-open-invoice="${selectedInvoice.id}">Ver fatura</button>
+          ${invoiceOutstanding(selectedInvoice)>0 ? `<button class="mini-btn success" data-pay-invoice="${selectedInvoice.id}">Pagar fatura</button>` : ''}
+        </div>
+      </div>` : `
+      <div class="invoice-box muted-invoice">
+        <div><span class="invoice-kicker">FATURA ${state.selectedMonth.split('-').reverse().join('/')}</span><strong>Nenhuma compra</strong><small>Sem fatura com vencimento neste mês.</small></div>
+      </div>`;
+
+    return `<article class="entity-card card-entity">
       <div class="entity-card-head"><div><h3>💳 ${escapeHtml(c.name)}</h3><small>${escapeHtml(c.issuer || 'Cartão de crédito')}</small></div><button class="mini-btn" data-edit-card="${c.id}">Editar</button></div>
       <div class="metric-line"><span>Limite total</span><strong>${money(c.limit)}</strong></div>
       <div class="metric-line"><span>Limite usado</span><strong>${money(c.used)}</strong></div>
@@ -283,9 +503,90 @@ function renderCards() {
       <div class="metric-line"><span>Disponível</span><strong>${money(c.available)}</strong></div>
       <div class="metric-line"><span>Fecha / vence</span><span>Dia ${c.closing_day} / ${c.due_day}</span></div>
       <div class="metric-line"><span>Conta de pagamento</span><span>${escapeHtml(account?.name || 'Não definida')}</span></div>
+      ${invoiceBlock}
+      ${nextInvoice ? `<div class="next-invoice-line"><span>Próxima fatura · ${fmtDate(nextInvoice.due_date)}</span><strong>${money(invoiceTotal(nextInvoice.id))}</strong></div>`:''}
     </article>`;
   }).join('') : '<div class="empty-state">Nenhum cartão cadastrado. Crie o primeiro para acompanhar limite e fatura.</div>';
 }
+
+function openInvoice(id) {
+  const invoice = state.invoices.find(i=>i.id===id);
+  if (!invoice) return alert('Fatura não encontrada.');
+  const card = byId(state.cards, invoice.card_id);
+  const txs = state.transactions
+    .filter(t=>t.invoice_id===invoice.id && t.status!=='cancelled')
+    .sort((a,b)=>(a.purchase_date||a.due_date).localeCompare(b.purchase_date||b.due_date));
+
+  $('invoiceDetailTitle').textContent = `Fatura ${card?.name || 'Cartão'}`;
+  $('invoiceDetailSubtitle').textContent = `${monthLabel(invoice.due_date.slice(0,7))} · vence ${fmtDate(invoice.due_date)}`;
+  $('invoiceDetailTotal').textContent = money(invoiceTotal(invoice.id));
+  $('invoiceDetailPaid').textContent = money(invoice.amount_paid||0);
+  $('invoiceDetailOutstanding').textContent = money(invoiceOutstanding(invoice));
+  $('invoiceDetailStatus').className = `status-badge invoice-status-${invoiceComputedStatus(invoice)}`;
+  $('invoiceDetailStatus').textContent = invoiceStatusLabel(invoice);
+  $('invoiceDetailRows').innerHTML = txs.length ? txs.map(t=>`
+    <div class="invoice-purchase-row">
+      <div>
+        <strong>${escapeHtml(t.description)}</strong>
+        <small>${fmtDate(t.purchase_date||t.due_date)}${t.installment_total>1?` · Parcela ${t.installment_number}/${t.installment_total}`:''}</small>
+      </div>
+      <strong>${money(t.amount)}</strong>
+    </div>`).join('') : '<div class="empty-state">Nenhuma compra nesta fatura.</div>';
+
+  $('invoiceDetailPayBtn').dataset.invoiceId = invoice.id;
+  $('invoiceDetailPayBtn').classList.toggle('hidden', invoiceOutstanding(invoice)<=0);
+  $('invoiceDetailModal').showModal();
+}
+
+function openInvoicePayment(id) {
+  const invoice = state.invoices.find(i=>i.id===id);
+  if (!invoice) return alert('Fatura não encontrada.');
+  const card = byId(state.cards, invoice.card_id);
+  const outstanding = invoiceOutstanding(invoice);
+  if (outstanding <= 0) return alert('Esta fatura já está paga.');
+
+  $('invoicePaymentForm').reset();
+  $('invoicePaymentId').value = invoice.id;
+  $('invoicePaymentCard').textContent = card?.name || 'Cartão';
+  $('invoicePaymentDue').textContent = fmtDate(invoice.due_date);
+  $('invoicePaymentOutstanding').textContent = money(outstanding);
+  $('invoicePaymentAmount').value = outstanding.toFixed(2).replace('.',',');
+  $('invoicePaymentDate').value = isoToday();
+
+  fillSelects();
+  const preferred = card?.payment_account_id || state.accounts[0]?.id || '';
+  $('invoicePaymentAccount').value = preferred;
+  $('invoicePaymentModal').showModal();
+}
+
+async function payInvoice(e) {
+  e.preventDefault();
+  const invoice = state.invoices.find(i=>i.id===$('invoicePaymentId').value);
+  if (!invoice) return alert('Fatura não encontrada.');
+
+  const amount = parseMoney($('invoicePaymentAmount').value);
+  const outstanding = invoiceOutstanding(invoice);
+  const accountId = $('invoicePaymentAccount').value;
+  const paidAt = $('invoicePaymentDate').value || isoToday();
+
+  if (amount <= 0) return alert('Informe um valor de pagamento maior que zero.');
+  if (amount > outstanding + 0.009) return alert(`O pagamento não pode ser maior que o restante da fatura (${money(outstanding)}).`);
+  if (!accountId) return alert('Selecione a conta usada para pagar.');
+
+  const { error } = await sb.rpc('pay_card_invoice', {
+    p_invoice_id: invoice.id,
+    p_account_id: accountId,
+    p_amount: amount,
+    p_paid_at: paidAt
+  });
+
+  if (error) return alert('Não foi possível pagar a fatura: ' + error.message);
+
+  $('invoicePaymentModal').close();
+  if ($('invoiceDetailModal').open) $('invoiceDetailModal').close();
+  await refresh();
+}
+
 
 function renderAccounts() {
   $('accountsGrid').innerHTML = state.accounts.length ? state.accounts.map(a => `<article class="entity-card">
@@ -337,11 +638,15 @@ function wireEvents() {
   $('cardForm').addEventListener('submit', saveCard);
   $('categoryForm').addEventListener('submit', saveCategory);
   $('incomeSourceForm').addEventListener('submit', saveIncomeSource);
+  $('invoicePaymentForm').addEventListener('submit', payInvoice);
+  $('invoiceDetailPayBtn').addEventListener('click', ()=>{ const id=$('invoiceDetailPayBtn').dataset.invoiceId; $('invoiceDetailModal').close(); openInvoicePayment(id); });
 
   $('transactionTypeFilter').addEventListener('change', renderTransactions);
   $('transactionStatusFilter').addEventListener('change', renderTransactions);
 
   document.body.addEventListener('click', async (e)=>{
+    const payInvoiceBtn = e.target.closest('[data-pay-invoice]'); if(payInvoiceBtn) return openInvoicePayment(payInvoiceBtn.dataset.payInvoice);
+    const openInvoiceBtn = e.target.closest('[data-open-invoice]'); if(openInvoiceBtn && openInvoiceBtn.dataset.openInvoice) return openInvoice(openInvoiceBtn.dataset.openInvoice);
     const pay = e.target.closest('[data-pay]'); if(pay) return markPaid(pay.dataset.pay);
     const cancel = e.target.closest('[data-cancel]'); if(cancel) return cancelTransaction(cancel.dataset.cancel);
     const ec = e.target.closest('[data-edit-card]'); if(ec) return openCard(ec.dataset.editCard);
@@ -467,6 +772,8 @@ async function saveTransaction(e) {
   }
 
   $('transactionModal').close();
+  await loadData();
+  if (method === 'credit') await syncCardInvoices();
   await refresh();
 }
 
@@ -484,6 +791,10 @@ async function applyBalanceForTransaction(t, direction=1) {
 
 async function markPaid(id) {
   const t=state.transactions.find(x=>x.id===id); if(!t||t.status!=='pending')return;
+  if (t.payment_method === 'credit') {
+    const invoice = invoiceForTransaction(t);
+    return invoice ? openInvoicePayment(invoice.id) : alert('Esta compra deve ser paga pela fatura do cartão.');
+  }
   const label=t.type==='expense'?'marcar esta conta como paga':'marcar esta receita como recebida';
   if(!confirm(`Deseja ${label}?`))return;
   await applyBalanceForTransaction(t,1);
@@ -494,6 +805,12 @@ async function markPaid(id) {
 
 async function cancelTransaction(id) {
   const t=state.transactions.find(x=>x.id===id); if(!t||t.status!=='pending')return;
+  if (t.payment_method === 'credit') {
+    const invoice = invoiceForTransaction(t);
+    if (invoice && Number(invoice.amount_paid || 0) > 0) {
+      return alert('Não é possível cancelar uma compra depois que o pagamento da fatura já começou.');
+    }
+  }
   if(!confirm(`Cancelar "${t.description}"?`))return;
   const {error}=await sb.from('transactions').update({status:'cancelled'}).eq('id',id).eq('user_id',uid());
   if(error) return alert('Erro: '+error.message);
@@ -520,6 +837,6 @@ async function saveCategory(e){e.preventDefault();const id=$('categoryId').value
 function openIncomeSource(id=''){ $('incomeSourceForm').reset();$('incomeSourceId').value=id;if(id){const s=byId(state.incomeSources,id);$('incomeSourceName').value=s.name;$('incomeSourceType').value=s.source_type;$('incomeSourceDefaultAmount').value=s.default_amount?Number(s.default_amount).toFixed(2).replace('.',','):'';$('incomeSourceDay').value=s.expected_day||'';}$('incomeSourceModal').showModal();}
 async function saveIncomeSource(e){e.preventDefault();const id=$('incomeSourceId').value;const amt=parseMoney($('incomeSourceDefaultAmount').value);const payload={user_id:uid(),name:$('incomeSourceName').value.trim(),source_type:$('incomeSourceType').value,default_amount:amt||null,expected_day:$('incomeSourceDay').value?Number($('incomeSourceDay').value):null};const q=id?sb.from('income_sources').update(payload).eq('id',id).eq('user_id',uid()):sb.from('income_sources').insert(payload);const{error}=await q;if(error)return alert(error.message);$('incomeSourceModal').close();await refresh();}
 
-async function refresh(){await loadData();renderAll();}
+async function refresh(){await loadData();await syncCardInvoices();await loadData();renderAll();}
 
 init();

@@ -213,3 +213,44 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--orange);
   .auth-topbar{justify-content:center}.auth-visual{min-height:285px;padding:40px 23px}.auth-visual h1{font-size:34px}.auth-visual p{font-size:14px}.auth-feature-row{display:none}.auth-shape-one{width:48px;height:48px}.auth-shape-three{width:52px;height:38px}.auth-card{padding:26px 22px;border-radius:18px}
 }
 @media(max-width:460px){.summary-grid{grid-template-columns:1fr}.topbar h1{font-size:23px}.month-input{max-width:132px;padding:9px}.panel{padding:16px}}
+
+
+/* Faturas de cartão */
+#cardsGrid{grid-template-columns:repeat(auto-fit,minmax(360px,1fr))}
+.status-invoice{background:#EAF1FF;color:#315B9B}
+.invoice-status-open{background:#FFF4D6;color:#945F00}
+.invoice-status-partial{background:#EAF1FF;color:#315B9B}
+.invoice-status-paid{background:#E3F7EA;color:#17623A}
+.invoice-status-overdue{background:#FDE8E8;color:#9D2B2B}
+.card-entity{display:flex;flex-direction:column}
+.invoice-box{margin-top:18px;padding:15px;border:1px solid #F0DDD7;background:#FFF9F6;border-radius:14px;display:grid;gap:10px}
+.invoice-box.muted-invoice{background:#FAFAFB;border-color:#ECECF0;color:var(--muted)}
+.invoice-box-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.invoice-box-head>div{display:grid;gap:3px}
+.invoice-box-head strong{font-size:22px;color:#20242D;letter-spacing:-.03em}
+.invoice-box-head small{color:var(--muted);font-size:11px}
+.invoice-kicker{font-size:9.5px;font-weight:800;letter-spacing:.11em;color:#A46858}
+.invoice-progress-row{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.invoice-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.next-invoice-line{display:flex;justify-content:space-between;gap:12px;padding-top:12px;margin-top:12px;border-top:1px dashed #E7E7EA;font-size:12px;color:var(--muted)}
+.next-invoice-line strong{color:#343A45}
+.invoice-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.invoice-summary-grid>div{background:#F7F7F9;border:1px solid #ECECF0;border-radius:12px;padding:12px;display:grid;gap:4px}
+.invoice-summary-grid span{font-size:10px;color:var(--muted)}
+.invoice-summary-grid strong{font-size:16px;color:#20242D}
+.invoice-detail-status-line{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px}
+.invoice-purchase-list{display:grid;gap:7px;max-height:360px;overflow:auto;padding-right:2px}
+.invoice-purchase-row{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:11px 12px;border:1px solid #ECECF0;border-radius:12px;background:#fff}
+.invoice-purchase-row>div{display:grid;gap:3px;min-width:0}
+.invoice-purchase-row strong{font-size:12.5px}
+.invoice-purchase-row small{font-size:10.5px;color:var(--muted)}
+.invoice-payment-highlight{background:linear-gradient(135deg,#FFF3EE,#FFF9F6);border:1px solid #F2D8CF;border-radius:14px;padding:15px;display:grid;gap:3px}
+.invoice-payment-highlight span{font-size:10px;color:#9A6A5D;font-weight:700;letter-spacing:.06em}
+.invoice-payment-highlight strong{font-size:25px;color:#20242D;letter-spacing:-.035em}
+.invoice-payment-highlight small{color:var(--muted)}
+.invoice-help{font-size:11px;line-height:1.5;margin:0}
+@media(max-width:600px){
+  #cardsGrid{grid-template-columns:1fr}
+  .invoice-summary-grid{grid-template-columns:1fr}
+  .invoice-box-head{align-items:center}
+}
