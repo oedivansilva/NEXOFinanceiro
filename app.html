@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=3.0" />
+  <link rel="stylesheet" href="style.css?v=4.0" />
 </head>
 <body>
   <header class="nexo-topbar app-global-topbar">
@@ -82,7 +82,7 @@
           <div class="panel-head wrap"><div><p class="eyebrow">MOVIMENTAÇÕES</p><h2>Lançamentos</h2></div><button id="newTransactionBtn" class="btn btn-primary">＋ Novo lançamento</button></div>
           <div class="filters-row">
             <select id="transactionTypeFilter"><option value="all">Todos os tipos</option><option value="expense">Despesas</option><option value="income">Receitas</option></select>
-            <select id="transactionStatusFilter"><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="paid">Pagos/Recebidos</option><option value="overdue">Atrasados</option><option value="cancelled">Cancelados</option></select>
+            <select id="transactionStatusFilter"><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="invoice">Na fatura</option><option value="paid">Pagos/Recebidos</option><option value="overdue">Atrasados</option><option value="cancelled">Cancelados</option></select>
           </div>
           <div id="transactionsTable" class="table-wrap"></div>
         </article>
@@ -184,6 +184,76 @@
     </form>
   </dialog>
 
+
+  <dialog id="invoiceDetailModal" class="modal">
+    <div class="modal-card wide">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">FATURA DO CARTÃO</p>
+          <h2 id="invoiceDetailTitle">Fatura</h2>
+          <p id="invoiceDetailSubtitle" class="muted"></p>
+        </div>
+        <button type="button" class="icon-btn" data-close="invoiceDetailModal">×</button>
+      </div>
+
+      <div class="invoice-summary-grid">
+        <div><span>Total</span><strong id="invoiceDetailTotal">R$ 0,00</strong></div>
+        <div><span>Pago</span><strong id="invoiceDetailPaid">R$ 0,00</strong></div>
+        <div><span>Restante</span><strong id="invoiceDetailOutstanding">R$ 0,00</strong></div>
+      </div>
+
+      <div class="invoice-detail-status-line">
+        <span>Status</span>
+        <span id="invoiceDetailStatus" class="status-badge invoice-status-open">Em aberto</span>
+      </div>
+
+      <div id="invoiceDetailRows" class="invoice-purchase-list"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="invoiceDetailModal">Fechar</button>
+        <button type="button" id="invoiceDetailPayBtn" class="btn btn-primary">Pagar fatura</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="invoicePaymentModal" class="modal">
+    <form id="invoicePaymentForm" method="dialog" class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">PAGAMENTO DE FATURA</p>
+          <h2>Pagar <span id="invoicePaymentCard">cartão</span></h2>
+        </div>
+        <button type="button" class="icon-btn" data-close="invoicePaymentModal">×</button>
+      </div>
+      <input type="hidden" id="invoicePaymentId" />
+
+      <div class="invoice-payment-highlight">
+        <span>Restante da fatura</span>
+        <strong id="invoicePaymentOutstanding">R$ 0,00</strong>
+        <small>Vencimento: <span id="invoicePaymentDue">—</span></small>
+      </div>
+
+      <label>Valor a pagar
+        <input id="invoicePaymentAmount" inputmode="decimal" required placeholder="0,00" />
+      </label>
+
+      <label>Conta usada para pagar
+        <select id="invoicePaymentAccount" required></select>
+      </label>
+
+      <label>Data do pagamento
+        <input id="invoicePaymentDate" type="date" required />
+      </label>
+
+      <p class="muted invoice-help">Pagamento parcial libera o mesmo valor no limite. Ao quitar a fatura, todas as compras vinculadas são marcadas como pagas.</p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="invoicePaymentModal">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Confirmar pagamento</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="accountModal" class="modal">
     <form id="accountForm" method="dialog" class="modal-card">
       <div class="modal-head"><h2>Conta</h2><button type="button" class="icon-btn" data-close="accountModal">×</button></div>
@@ -233,6 +303,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js?v=3.0"></script>
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=4.0"></script>
 </body>
 </html>
