@@ -167,8 +167,12 @@
       <button type="button" id="moreOptionsToggle" class="more-options">Mais opções ▾</button>
       <div id="moreOptions" class="more-options-area hidden">
         <div class="form-grid two">
-          <label>Data de vencimento / compra<input id="transactionDueDate" type="date" required /></label>
+          <label>Data da compra / lançamento<input id="transactionPurchaseDate" type="date" required /></label>
+          <label>Vencimento<input id="transactionDueDate" type="date" required /></label>
+        </div>
+        <div class="form-grid two">
           <label>Data de pagamento<input id="transactionPaidAt" type="date" /></label>
+          <div class="muted" style="align-self:end;padding-bottom:10px">No cartão, o vencimento é calculado automaticamente pelo fechamento e vencimento cadastrados.</div>
         </div>
         <div class="form-grid two">
           <label>Status<select id="transactionStatus"><option value="pending">Pendente</option><option value="paid">Pago / Recebido</option><option value="cancelled">Cancelado</option></select></label>
@@ -229,6 +233,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js?v=3.0"></script>
-  <script src="app.js?v=3.0"></script>
+  <script src="app.js?v=3.1"></script>
 </body>
 </html>
