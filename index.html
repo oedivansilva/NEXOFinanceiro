@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meu Financeiro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-brand">
+      <div class="brand-mark">$</div>
+      <div>
+        <p class="eyebrow">GESTÃO FINANCEIRA</p>
+        <h1>Seu dinheiro, sem planilha infinita.</h1>
+        <p>Controle contas, cartões, receitas e gastos do dia a dia com lançamentos rápidos.</p>
+      </div>
+    </section>
+
+    <section class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth-tab="login">Entrar</button>
+        <button class="auth-tab" data-auth-tab="signup">Criar conta</button>
+      </div>
+
+      <form id="loginForm" class="auth-form active">
+        <label>E-mail
+          <input id="loginEmail" type="email" autocomplete="email" required placeholder="voce@email.com" />
+        </label>
+        <label>Senha
+          <input id="loginPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="••••••••" />
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+      </form>
+
+      <form id="signupForm" class="auth-form">
+        <label>Nome
+          <input id="signupName" type="text" required placeholder="Seu nome" />
+        </label>
+        <label>E-mail
+          <input id="signupEmail" type="email" autocomplete="email" required placeholder="voce@email.com" />
+        </label>
+        <label>Senha
+          <input id="signupPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres" />
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Criar minha conta</button>
+      </form>
+
+      <p id="authMessage" class="form-message"></p>
+      <p class="auth-note">Se a confirmação de e-mail estiver ativada no Supabase, confirme o e-mail antes do primeiro acesso.</p>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

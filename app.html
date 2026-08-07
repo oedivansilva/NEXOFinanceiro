@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meu Financeiro | Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark small">$</div>
+        <div><strong>Meu Financeiro</strong><span>Pessoal</span></div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard">⌂ <span>Visão geral</span></button>
+        <button class="nav-item" data-view="transactions">↕ <span>Lançamentos</span></button>
+        <button class="nav-item" data-view="planning">▦ <span>Planejamento</span></button>
+        <button class="nav-item" data-view="cards">▣ <span>Cartões</span></button>
+        <button class="nav-item" data-view="accounts">◉ <span>Contas</span></button>
+        <button class="nav-item" data-view="settings">⚙ <span>Cadastros</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div id="userMini" class="user-mini"></div>
+        <button id="logoutBtn" class="btn btn-ghost btn-block">Sair</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="viewEyebrow">FINANÇAS PESSOAIS</p>
+          <h1 id="viewTitle">Visão geral</h1>
+        </div>
+        <div class="topbar-actions">
+          <input id="monthFilter" type="month" class="month-input" />
+          <button id="quickAddTop" class="btn btn-primary">＋ Lançar</button>
+        </div>
+      </header>
+
+      <section id="dashboardView" class="view active">
+        <div class="summary-grid">
+          <article class="summary-card"><span>Saldo em contas</span><strong id="balanceTotal">R$ 0,00</strong><small>Saldo cadastrado</small></article>
+          <article class="summary-card"><span>Receitas do mês</span><strong id="incomeMonth">R$ 0,00</strong><small>Recebidas + previstas</small></article>
+          <article class="summary-card"><span>Despesas do mês</span><strong id="expenseMonth">R$ 0,00</strong><small>Pagas + pendentes</small></article>
+          <article class="summary-card highlight"><span>Saldo projetado</span><strong id="projectedBalance">R$ 0,00</strong><small>Saldo + receitas pendentes − despesas pendentes</small></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">CONTAS</p><h2>Próximos vencimentos</h2></div><button class="text-button" data-jump="transactions">Ver todos</button></div>
+            <div id="upcomingList" class="list-stack empty-state">Nenhuma conta pendente.</div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">CARTÕES</p><h2>Limites</h2></div><button class="text-button" data-jump="cards">Gerenciar</button></div>
+            <div id="dashboardCards" class="card-limit-list empty-state">Nenhum cartão cadastrado.</div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head"><div><p class="eyebrow">MOVIMENTAÇÃO</p><h2>Últimos lançamentos</h2></div><button class="text-button" data-jump="transactions">Abrir lançamentos</button></div>
+          <div id="recentTransactions" class="table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="transactionsView" class="view">
+        <article class="panel">
+          <div class="panel-head wrap"><div><p class="eyebrow">MOVIMENTAÇÕES</p><h2>Lançamentos</h2></div><button id="newTransactionBtn" class="btn btn-primary">＋ Novo lançamento</button></div>
+          <div class="filters-row">
+            <select id="transactionTypeFilter"><option value="all">Todos os tipos</option><option value="expense">Despesas</option><option value="income">Receitas</option></select>
+            <select id="transactionStatusFilter"><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="paid">Pagos/Recebidos</option><option value="overdue">Atrasados</option><option value="cancelled">Cancelados</option></select>
+          </div>
+          <div id="transactionsTable" class="table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="planningView" class="view">
+        <div class="summary-grid planning-summary">
+          <article class="summary-card"><span>Previsto de receitas</span><strong id="planningIncome">R$ 0,00</strong></article>
+          <article class="summary-card"><span>Previsto de despesas</span><strong id="planningExpenses">R$ 0,00</strong></article>
+          <article class="summary-card"><span>Já realizado</span><strong id="planningPaid">R$ 0,00</strong></article>
+          <article class="summary-card highlight"><span>Resultado previsto</span><strong id="planningResult">R$ 0,00</strong></article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><div><p class="eyebrow">MÊS SELECIONADO</p><h2>Planejamento mensal</h2></div></div>
+          <div id="planningTable" class="table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="cardsView" class="view">
+        <div class="section-action"><button id="newCardBtn" class="btn btn-primary">＋ Novo cartão</button></div>
+        <div id="cardsGrid" class="cards-grid"></div>
+      </section>
+
+      <section id="accountsView" class="view">
+        <div class="section-action"><button id="newAccountBtn" class="btn btn-primary">＋ Nova conta</button></div>
+        <div id="accountsGrid" class="cards-grid"></div>
+      </section>
+
+      <section id="settingsView" class="view">
+        <div class="settings-grid">
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">DESPESAS</p><h2>Categorias</h2></div><button id="newCategoryBtn" class="btn btn-secondary">＋ Criar</button></div>
+            <div id="categoriesList" class="simple-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">RECEITAS</p><h2>Fontes de renda</h2></div><button id="newIncomeSourceBtn" class="btn btn-secondary">＋ Criar</button></div>
+            <div id="incomeSourcesList" class="simple-list"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <button id="mobileQuickAdd" class="mobile-fab">＋</button>
+  </div>
+
+  <dialog id="transactionModal" class="modal">
+    <form id="transactionForm" method="dialog" class="modal-card wide">
+      <div class="modal-head"><div><p class="eyebrow">LANÇAMENTO RÁPIDO</p><h2 id="transactionModalTitle">Nova despesa</h2></div><button type="button" class="icon-btn" data-close="transactionModal">×</button></div>
+      <input type="hidden" id="transactionId" />
+      <div class="type-switch">
+        <button type="button" class="type-option active" data-type="expense">Despesa</button>
+        <button type="button" class="type-option" data-type="income">Receita</button>
+      </div>
+      <div class="quick-amount-wrap"><span>R$</span><input id="transactionAmount" inputmode="decimal" placeholder="0,00" required /></div>
+      <label>O que foi?
+        <input id="transactionDescription" type="text" required placeholder="Ex.: Sorvete" />
+      </label>
+      <div id="expenseFields">
+        <label>Como pagou?
+          <select id="paymentMethod">
+            <option value="pix">PIX</option><option value="debit">Débito</option><option value="credit">Crédito</option><option value="cash">Dinheiro</option><option value="boleto">Boleto</option><option value="other">Outro</option>
+          </select>
+        </label>
+        <label id="accountField">Conta
+          <select id="transactionAccount"></select>
+        </label>
+        <label id="cardField" class="hidden">Cartão
+          <select id="transactionCard"></select>
+        </label>
+        <label>Categoria
+          <select id="transactionCategory"></select>
+        </label>
+      </div>
+      <div id="incomeFields" class="hidden">
+        <label>Fonte de renda
+          <select id="transactionIncomeSource"></select>
+        </label>
+        <label>Conta de recebimento
+          <select id="incomeAccount"></select>
+        </label>
+      </div>
+      <button type="button" id="moreOptionsToggle" class="more-options">Mais opções ▾</button>
+      <div id="moreOptions" class="more-options-area hidden">
+        <div class="form-grid two">
+          <label>Data de vencimento / compra<input id="transactionDueDate" type="date" required /></label>
+          <label>Data de pagamento<input id="transactionPaidAt" type="date" /></label>
+        </div>
+        <div class="form-grid two">
+          <label>Status<select id="transactionStatus"><option value="pending">Pendente</option><option value="paid">Pago / Recebido</option><option value="cancelled">Cancelado</option></select></label>
+          <label id="installmentsField">Parcelas<input id="transactionInstallments" type="number" min="1" max="60" value="1" /></label>
+        </div>
+        <label>Observação<textarea id="transactionNotes" rows="3" placeholder="Opcional"></textarea></label>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="transactionModal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar lançamento</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="accountModal" class="modal">
+    <form id="accountForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Conta</h2><button type="button" class="icon-btn" data-close="accountModal">×</button></div>
+      <input type="hidden" id="accountId" />
+      <label>Nome<input id="accountName" required placeholder="Ex.: Itaú" /></label>
+      <label>Tipo<select id="accountType"><option value="checking">Conta corrente</option><option value="wallet">Carteira digital</option><option value="cash">Dinheiro</option><option value="savings">Poupança</option><option value="investment">Investimento</option></select></label>
+      <label>Saldo inicial / atual<input id="accountBalance" inputmode="decimal" required placeholder="0,00" /></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="accountModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="cardModal" class="modal">
+    <form id="cardForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Cartão</h2><button type="button" class="icon-btn" data-close="cardModal">×</button></div>
+      <input type="hidden" id="cardId" />
+      <label>Nome do cartão<input id="cardName" required placeholder="Ex.: Azul" /></label>
+      <label>Banco / emissor<input id="cardIssuer" placeholder="Ex.: Itaú" /></label>
+      <label>Limite total<input id="cardLimit" inputmode="decimal" required placeholder="5000,00" /></label>
+      <div class="form-grid two"><label>Fechamento<input id="cardClosingDay" type="number" min="1" max="31" value="28" /></label><label>Vencimento<input id="cardDueDay" type="number" min="1" max="31" value="7" /></label></div>
+      <label>Conta usada para pagar<select id="cardPaymentAccount"></select></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="cardModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="categoryModal" class="modal">
+    <form id="categoryForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Categoria de despesa</h2><button type="button" class="icon-btn" data-close="categoryModal">×</button></div>
+      <input type="hidden" id="categoryId" />
+      <label>Nome<input id="categoryName" required placeholder="Ex.: Alimentação" /></label>
+      <label>Grupo<select id="categoryGroup"><option value="essential">Essencial</option><option value="nonessential">Não essencial</option><option value="leisure">Lazer</option><option value="debt">Dívida</option><option value="investment">Investimento</option><option value="subscription">Assinatura</option><option value="other">Outro</option></select></label>
+      <label>Ícone / emoji<input id="categoryIcon" maxlength="4" placeholder="🍔" /></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="categoryModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="incomeSourceModal" class="modal">
+    <form id="incomeSourceForm" method="dialog" class="modal-card">
+      <div class="modal-head"><h2>Fonte de renda</h2><button type="button" class="icon-btn" data-close="incomeSourceModal">×</button></div>
+      <input type="hidden" id="incomeSourceId" />
+      <label>Nome<input id="incomeSourceName" required placeholder="Ex.: Salário" /></label>
+      <label>Tipo<select id="incomeSourceType"><option value="recurring">Recorrente</option><option value="variable">Variável</option><option value="sale">Venda</option><option value="refund">Reembolso</option><option value="other">Outro</option></select></label>
+      <label>Valor padrão (opcional)<input id="incomeSourceDefaultAmount" inputmode="decimal" placeholder="0,00" /></label>
+      <label>Dia previsto (opcional)<input id="incomeSourceDay" type="number" min="1" max="31" placeholder="5" /></label>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="incomeSourceModal">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
