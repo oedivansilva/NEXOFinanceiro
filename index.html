@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7.0">
+  <link rel="stylesheet" href="style.css?v=9.0">
 </head>
 <body class="auth-page">
   <header class="nexo-topbar auth-topbar">
@@ -65,10 +65,15 @@
           <label>E-mail
             <input id="signupEmail" type="email" autocomplete="email" required placeholder="voce@email.com">
           </label>
+          <label>CPF
+            <input id="signupCpf" type="text" inputmode="numeric" autocomplete="off" required maxlength="14" placeholder="000.000.000-00">
+            <small class="field-help">Usamos o CPF apenas para garantir um único período grátis de 30 dias por pessoa.</small>
+          </label>
           <label>Senha
             <input id="signupPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Mínimo 6 caracteres">
           </label>
-          <button class="btn btn-primary btn-block" type="submit">Criar minha conta</button>
+          <div class="trial-signup-note"><strong>👑 30 dias de NEXO Pro grátis</strong><span>Teste todos os recursos premium sem cobrança. Depois, escolha Essencial, Plus ou Pro.</span></div>
+          <button class="btn btn-primary btn-block" type="submit">Começar meus 30 dias grátis</button>
         </form>
 
         <p id="authMessage" class="form-message"></p>
@@ -100,7 +105,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=7.0"></script>
-  <script src="auth.js?v=7.0"></script>
+  <script src="supabase-config.js?v=9.0"></script>
+  <script src="auth.js?v=9.0"></script>
 </body>
 </html>

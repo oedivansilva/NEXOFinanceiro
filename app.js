@@ -10,9 +10,14 @@ const state = {
   transactions: [],
   invoices: [],
   invoicePayments: [],
+  plans: [],
   plan: null,
+  entitlements: { plan_code: 'nexo-essencial', can_use_support: false, can_use_protection: false, effective_status: 'loading' },
   subscription: null,
   checkoutSession: null,
+  supportBenefitRequest: null,
+  accessStatus: 'loading',
+  protectionSpendResolver: null,
   billingReturnHandled: false,
   billingLoaded: false,
   selectedMonth: '',
@@ -37,14 +42,99 @@ const escapeHtml = (s='') => String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<
 const fmtDate = (date) => date ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 const uid = () => state.user?.id;
 
-const DEFAULT_PLAN = {
-  code: 'nexo-pessoal',
-  name: 'NEXO Financeiro Pessoal',
-  description: 'Controle de contas, cartões, faturas e planejamento financeiro em um único lugar.',
-  price: 19.90,
-  billing_cycle: 'monthly',
-  provider: 'asaas'
+const addDaysIso = (dateString, days) => {
+  const d = new Date(`${dateString}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
 };
+const daysUntil = (dateString) => {
+  if (!dateString) return null;
+  const a = new Date(`${isoToday()}T12:00:00`);
+  const b = new Date(`${dateString}T12:00:00`);
+  return Math.ceil((b-a)/86400000);
+};
+const isStaff = () => ['owner','admin','support'].includes(state.profile?.role);
+
+function effectiveStatusFromSubscription(sub = state.subscription) {
+  if (isStaff()) return 'active';
+  if (!sub) return 'suspended';
+  if (sub.status === 'active') return 'active';
+  const today = isoToday();
+  if (sub.support_extension_start && sub.support_extension_ends_at && today >= sub.support_extension_start && today <= sub.support_extension_ends_at) return 'support';
+  if (sub.trial_ends_at && today <= sub.trial_ends_at && ['trialing','grace','support'].includes(sub.status)) return 'trialing';
+  if (sub.grace_ends_at && today <= sub.grace_ends_at && ['trialing','grace','support'].includes(sub.status)) return 'grace';
+  return sub.status || 'suspended';
+}
+
+function hasWriteAccess() {
+  if (isStaff()) return true;
+  return ['active','trialing','grace','support'].includes(state.accessStatus || effectiveStatusFromSubscription());
+}
+
+function requireWriteAccess() {
+  if (hasWriteAccess()) return true;
+  alert('Seu NEXO está em modo somente leitura. Seus dados continuam aqui, mas é necessário regularizar a assinatura para fazer alterações.');
+  switchView('subscription');
+  return false;
+}
+
+const DEFAULT_PLANS = [
+  {
+    code: 'nexo-essencial', name: 'NEXO Essencial',
+    description: 'Organização financeira completa para contas, cartões, faturas e planejamento.',
+    price: 19.90, theme_key: 'essential', includes_support: false, includes_protection: false, sort_order: 10
+  },
+  {
+    code: 'nexo-plus', name: 'NEXO Plus',
+    description: 'Tudo do Essencial, com o benefício NEXO Apoio em caso de desemprego.',
+    price: 29.90, theme_key: 'plus', includes_support: true, includes_protection: false, sort_order: 20
+  },
+  {
+    code: 'nexo-pro', name: 'NEXO Pro',
+    description: 'Experiência premium com NEXO Apoio e Proteção Financeira completa.',
+    price: 39.90, theme_key: 'pro', includes_support: true, includes_protection: true, sort_order: 30
+  }
+];
+const DEFAULT_PLAN = DEFAULT_PLANS[0];
+
+function planByCode(code) {
+  return state.plans.find(p => p.code === code) || DEFAULT_PLANS.find(p => p.code === code) || DEFAULT_PLAN;
+}
+
+function currentPlanCode() {
+  if (isStaff()) return 'nexo-pro';
+  if (state.entitlements?.plan_code) return state.entitlements.plan_code;
+  if (['trialing','grace'].includes(subscriptionStatusKey())) return 'nexo-pro';
+  const byIdPlan = state.plans.find(p => p.id === state.subscription?.plan_id);
+  return byIdPlan?.code || 'nexo-essencial';
+}
+
+function currentPlan() {
+  return planByCode(currentPlanCode());
+}
+
+function canUseSupport() {
+  return isStaff() || Boolean(state.entitlements?.can_use_support);
+}
+
+function canUseProtection() {
+  return isStaff() || Boolean(state.entitlements?.can_use_protection);
+}
+
+function applyPlanTheme() {
+  const code = currentPlanCode();
+  const theme = code === 'nexo-pro' ? 'pro' : code === 'nexo-plus' ? 'plus' : 'essential';
+  document.body.classList.remove('theme-essential','theme-plus','theme-pro');
+  document.body.classList.add(`theme-${theme}`);
+  document.documentElement.dataset.nexoTheme = theme;
+
+  const badge = $('planThemeBadge');
+  if (badge) {
+    const labels = { essential:'ESSENCIAL', plus:'PLUS', pro:'PRO' };
+    badge.textContent = labels[theme];
+    badge.className = `plan-theme-badge plan-theme-${theme}`;
+  }
+}
 
 const monthLabel = (month) => {
   if (!month) return '—';
@@ -171,13 +261,15 @@ async function init() {
   if (defaultsCreated) await loadData();
   renderAll();
 
-  // Assinatura carrega separadamente para não deixar a abertura do financeiro mais lenta.
-  loadBillingData();
+  // Assinatura carrega separadamente e também calcula trial/carência/acesso.
+  const billingPromise = loadBillingData();
 
   // A sincronização das faturas roda em segundo plano.
   // Assim ela não segura a abertura do sistema.
   setTimeout(async () => {
     try {
+      await billingPromise;
+      if (!hasWriteAccess()) return;
       const changed = await syncCardInvoices();
       if (changed) {
         await loadData();
@@ -220,27 +312,58 @@ async function loadBillingData() {
   renderSubscription();
 
   try {
-    const [planRes, subscriptionRes, checkoutRes] = await Promise.all([
-      sb.from('plans').select('*').eq('code', 'nexo-pessoal').eq('active', true).maybeSingle(),
+    // Se um NEXO Apoio pago terminou, a Edge Function reativa a recorrência Asaas.
+    try {
+      await sb.functions.invoke('nexo-admin', { body:{ action:'sync_my_support_subscription' } });
+    } catch (_) {}
+
+    let refreshedStatus = null;
+    try {
+      const refreshed = await sb.rpc('refresh_my_subscription_status');
+      if (!refreshed.error) refreshedStatus = refreshed.data || null;
+    } catch (_) {}
+
+    const [plansRes, subscriptionRes, checkoutRes, supportRes, entitlementsRes] = await Promise.all([
+      sb.from('plans').select('*').eq('active', true).in('code',['nexo-essencial','nexo-plus','nexo-pro']).order('sort_order', { ascending:true }),
       sb.from('subscriptions').select('*').eq('user_id', uid()).maybeSingle(),
-      sb.from('asaas_checkout_sessions').select('*').eq('user_id', uid()).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      sb.from('asaas_checkout_sessions').select('*').eq('user_id', uid()).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      sb.from('support_benefit_requests').select('*').eq('user_id', uid()).order('created_at', { ascending:false }).limit(1).maybeSingle(),
+      sb.rpc('my_nexo_entitlements')
     ]);
 
-    if (planRes.error) console.warn('Planos ainda não disponíveis:', planRes.error.message);
+    if (plansRes.error) console.warn('Planos ainda não disponíveis:', plansRes.error.message);
     if (subscriptionRes.error) console.warn('Assinatura ainda não disponível:', subscriptionRes.error.message);
     if (checkoutRes.error) console.warn('Checkout Asaas ainda não disponível:', checkoutRes.error.message);
+    if (supportRes.error) console.warn('NEXO Apoio ainda não disponível:', supportRes.error.message);
 
-    state.plan = planRes.data || DEFAULT_PLAN;
+    state.plans = plansRes.data?.length ? plansRes.data : DEFAULT_PLANS;
     state.subscription = subscriptionRes.data || null;
     state.checkoutSession = checkoutRes.data || null;
+    state.supportBenefitRequest = supportRes.data || null;
+
+    const ent = Array.isArray(entitlementsRes.data) ? entitlementsRes.data[0] : entitlementsRes.data;
+    state.entitlements = ent || {
+      plan_code: state.subscription?.status === 'trialing' || state.subscription?.status === 'grace' ? 'nexo-pro' : 'nexo-essencial',
+      can_use_support: ['trialing','grace'].includes(state.subscription?.status),
+      can_use_protection: ['trialing','grace'].includes(state.subscription?.status),
+      effective_status: refreshedStatus || effectiveStatusFromSubscription(state.subscription)
+    };
+
+    const subPlan = state.plans.find(p => p.id === state.subscription?.plan_id);
+    state.plan = subPlan || planByCode(state.entitlements.plan_code);
+    state.accessStatus = refreshedStatus || state.entitlements?.effective_status || effectiveStatusFromSubscription(state.subscription);
   } catch (error) {
     console.warn('Não foi possível carregar a assinatura:', error);
+    state.plans = DEFAULT_PLANS;
     state.plan = DEFAULT_PLAN;
     state.subscription = null;
     state.checkoutSession = null;
+    state.supportBenefitRequest = null;
+    state.entitlements = { plan_code:isStaff()?'nexo-pro':'nexo-essencial', can_use_support:isStaff(), can_use_protection:isStaff(), effective_status:isStaff()?'active':'suspended' };
+    state.accessStatus = isStaff() ? 'active' : 'suspended';
   } finally {
     state.billingLoaded = true;
-    renderSubscription();
+    renderAll();
     handleBillingReturn();
   }
 }
@@ -255,6 +378,7 @@ function subscriptionStatusLabel(status = subscriptionStatusKey()) {
     trialing: 'Período de teste',
     past_due: 'Pagamento pendente',
     grace: 'Em carência',
+    support: 'NEXO Apoio',
     suspended: 'Suspensa',
     cancelled: 'Cancelada',
     none: 'Não assinante'
@@ -278,83 +402,125 @@ function planPrice(plan = state.plan || DEFAULT_PLAN) {
 }
 
 function renderSubscription() {
-  if (!$('subscriptionPlanName')) return;
+  if (!$('subscriptionDetailPlan')) return;
 
-  const plan = state.plan || DEFAULT_PLAN;
   const subscription = state.subscription;
   const checkout = state.checkoutSession;
   const status = subscriptionStatusKey();
-  const active = ['active','trialing','grace'].includes(status);
-  const checkoutStillValid = checkout && ['active','pending','initiated'].includes(checkout.status) && (!checkout.expires_at || new Date(checkout.expires_at).getTime() > Date.now());
+  const active = status === 'active';
+  const current = currentPlan();
+  const trialPro = ['trialing','grace'].includes(state.accessStatus || status);
 
-  $('subscriptionPlanName').textContent = plan.name || DEFAULT_PLAN.name;
-  $('subscriptionPlanDescription').textContent = plan.description || DEFAULT_PLAN.description;
-  $('subscriptionDetailPlan').textContent = plan.name || DEFAULT_PLAN.name;
-  $('subscriptionPrice').textContent = money(planPrice(plan));
-
-  const badge = $('subscriptionStatusBadge');
-  badge.className = `subscription-status subscription-status-${status}`;
-  badge.textContent = state.billingLoaded ? subscriptionStatusLabel(status) : 'Carregando...';
-
+  $('subscriptionDetailPlan').textContent = trialPro ? 'NEXO Pro · período de teste' : (current?.name || 'NEXO');
   $('subscriptionDetailStatus').textContent = state.billingLoaded ? subscriptionStatusLabel(status) : 'Carregando...';
   $('subscriptionDetailStarted').textContent = subscription?.started_at ? fmtDate(String(subscription.started_at).slice(0,10)) : '—';
   $('subscriptionDetailNextBilling').textContent = subscription?.next_billing_at ? fmtDate(String(subscription.next_billing_at).slice(0,10)) : '—';
   $('subscriptionDetailLastPayment').textContent = subscription?.last_payment_at ? new Date(subscription.last_payment_at).toLocaleString('pt-BR') : '—';
+  $('subscriptionDetailTrialEnd').textContent = subscription?.trial_ends_at ? fmtDate(subscription.trial_ends_at) : '—';
+  const accessUntil = status==='support' ? subscription?.support_extension_ends_at : (status==='trialing' ? subscription?.trial_ends_at : (status==='grace' ? subscription?.grace_ends_at : null));
+  $('subscriptionDetailAccessUntil').textContent = accessUntil ? fmtDate(accessUntil) : (status==='active' ? 'Enquanto a assinatura estiver ativa' : '—');
 
-  const subscribeBtn = $('subscribePlanBtn');
-  subscribeBtn.disabled = !state.billingLoaded || active;
-  if (active) {
-    subscribeBtn.textContent = 'Assinatura ativa ✓';
-  } else if (checkoutStillValid && checkout.checkout_url) {
-    subscribeBtn.textContent = 'Continuar pagamento';
-  } else {
-    subscribeBtn.textContent = `Assinar por ${money(planPrice(plan))}/mês`;
+  const badge = $('subscriptionStatusBadge');
+  if (badge) {
+    badge.className = `subscription-status subscription-status-${status}`;
+    badge.textContent = state.billingLoaded ? subscriptionStatusLabel(status) : 'Carregando...';
+  }
+
+  const plans = (state.plans?.length ? state.plans : DEFAULT_PLANS)
+    .filter(p => ['nexo-essencial','nexo-plus','nexo-pro'].includes(p.code))
+    .sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0));
+
+  const features = {
+    'nexo-essencial': ['Contas, saldos e lançamentos','Cartões e faturas','Planejamento mensal','Histórico financeiro'],
+    'nexo-plus': ['Tudo do Essencial','NEXO Apoio por desemprego','+30 dias gratuitos após aprovação','Identidade visual verde exclusiva'],
+    'nexo-pro': ['Tudo do Plus','Proteção Financeira completa','Reserva automática para compromissos','Experiência Black + Gold premium']
+  };
+  const tone = { 'nexo-essencial':'essential', 'nexo-plus':'plus', 'nexo-pro':'pro' };
+  const labels = { 'nexo-essencial':'ESSENCIAL', 'nexo-plus':'PLUS', 'nexo-pro':'PRO' };
+
+  const grid = $('planOptionsGrid');
+  if (grid) {
+    grid.innerHTML = plans.map(plan => {
+      const isCurrent = active && currentPlanCode() === plan.code;
+      const isTrialPlan = trialPro && plan.code === 'nexo-pro';
+      const checkoutForPlan = checkout && checkout.plan_id === plan.id && ['active','pending','initiated'].includes(checkout.status) &&
+        (!checkout.expires_at || new Date(checkout.expires_at).getTime() > Date.now());
+      let actionText = `Assinar ${labels[plan.code]} · ${money(planPrice(plan))}`;
+      let actionType = 'checkout';
+      if (isCurrent) { actionText = 'Plano atual ✓'; actionType = 'current'; }
+      else if (active) { actionText = `Mudar para ${labels[plan.code]}`; actionType = 'change'; }
+      else if (checkoutForPlan) actionText = 'Continuar pagamento';
+      const disabled = !state.billingLoaded || isCurrent;
+      return `<article class="plan-choice-card plan-choice-${tone[plan.code]} ${isCurrent?'is-current':''} ${isTrialPlan?'is-trial':''}">
+        <div class="plan-choice-head">
+          <div><span class="plan-choice-kicker">${labels[plan.code]}</span><h3>${escapeHtml(plan.name)}</h3></div>
+          ${plan.code==='nexo-plus'?'<span class="plan-popular">MAIS POPULAR</span>':''}
+          ${isTrialPlan?'<span class="plan-trial-pill">SEU TESTE</span>':''}
+        </div>
+        <p>${escapeHtml(plan.description || '')}</p>
+        <div class="plan-choice-price"><strong>${money(planPrice(plan))}</strong><span>/mês</span></div>
+        <div class="plan-choice-features">${(features[plan.code]||[]).map(f=>`<div><span>✓</span><b>${escapeHtml(f)}</b></div>`).join('')}</div>
+        <button type="button" class="btn plan-choice-action" data-plan-action="${actionType}" data-plan-code="${plan.code}" ${disabled?'disabled':''}>${actionText}</button>
+      </article>`;
+    }).join('');
+  }
+
+  const trialCopy = $('trialPlanMessage');
+  if (trialCopy) {
+    if (trialPro) {
+      const days = Math.max(0,(daysUntil(subscription?.trial_ends_at)??0)+1);
+      trialCopy.classList.remove('hidden');
+      trialCopy.innerHTML = `<strong>👑 Você está experimentando o NEXO Pro</strong><span>Todos os recursos premium estão liberados durante o teste. ${days} dia${days===1?'':'s'} restante${days===1?'':'s'}.</span>`;
+    } else {
+      trialCopy.classList.add('hidden');
+      trialCopy.innerHTML = '';
+    }
   }
 
   const help = $('subscriptionActionHelp');
-  if (!state.billingLoaded) {
-    help.textContent = 'Carregando informações da assinatura...';
-  } else if (active) {
-    help.textContent = 'Sua assinatura está liberada. As próximas cobranças são acompanhadas automaticamente pelo Asaas.';
-  } else if (status === 'past_due') {
-    help.textContent = 'A última cobrança está pendente. Regularize o pagamento para manter o acesso.';
-  } else if (status === 'suspended') {
-    help.textContent = 'A assinatura está suspensa. Entre em contato com o suporte ou realize uma nova assinatura.';
-  } else if (checkoutStillValid) {
-    help.textContent = 'Seu checkout ainda está ativo. Continue o pagamento; a liberação acontece automaticamente após a confirmação.';
-  } else {
-    help.textContent = 'Você será levado ao checkout seguro do Asaas. Depois do pagamento, não é necessário avisar o suporte.';
+  if (help) {
+    if (!state.billingLoaded) help.textContent = 'Carregando informações da assinatura...';
+    else if (active) help.textContent = 'Sua assinatura está ativa. Você pode mudar de plano; o novo valor será aplicado à recorrência do Asaas.';
+    else if (status === 'trialing') help.textContent = 'Você está testando o NEXO Pro completo. Escolha qualquer plano quando quiser.';
+    else if (status === 'grace') help.textContent = 'Seu teste terminou e você está nos 2 dias de carência. Escolha um plano para continuar sem interrupção.';
+    else if (status === 'support') help.textContent = `NEXO Apoio ativo até ${fmtDate(subscription?.support_extension_ends_at)}.`;
+    else if (status === 'past_due') help.textContent = 'A última cobrança está pendente. Regularize para manter o acesso.';
+    else help.textContent = 'Escolha um plano. O checkout é hospedado pelo Asaas e a liberação acontece automaticamente após o pagamento.';
   }
 
+  renderNexoSupportStatus();
+
   const checkoutBox = $('subscriptionCheckoutBox');
-  if (checkout) {
-    checkoutBox.classList.remove('hidden');
-    checkoutBox.innerHTML = `<strong>Último checkout</strong><span>${escapeHtml(checkoutStatusLabel(checkout.status))}</span><small>Criado em ${new Date(checkout.created_at).toLocaleString('pt-BR')}</small>`;
-  } else {
-    checkoutBox.classList.add('hidden');
-    checkoutBox.innerHTML = '';
+  if (checkoutBox) {
+    if (checkout) {
+      const cp = plans.find(p=>p.id===checkout.plan_id);
+      checkoutBox.classList.remove('hidden');
+      checkoutBox.innerHTML = `<strong>Último checkout</strong><span>${escapeHtml(cp?.name||'NEXO')} · ${escapeHtml(checkoutStatusLabel(checkout.status))}</span><small>Criado em ${new Date(checkout.created_at).toLocaleString('pt-BR')}</small>`;
+    } else {
+      checkoutBox.classList.add('hidden');
+      checkoutBox.innerHTML = '';
+    }
   }
 }
 
-async function startAsaasCheckout() {
+async function startAsaasCheckout(planCode = 'nexo-essencial') {
   if (!state.billingLoaded) return;
-  if (['active','trialing','grace'].includes(subscriptionStatusKey())) return alert('Sua assinatura já está ativa.');
+  const plan = planByCode(planCode);
 
   const existing = state.checkoutSession;
-  const existingValid = existing && ['active','pending','initiated'].includes(existing.status) && existing.checkout_url && (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now());
+  const existingValid = existing && existing.plan_id === plan.id && ['active','pending','initiated'].includes(existing.status) && existing.checkout_url && (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now());
   if (existingValid) {
     window.location.href = existing.checkout_url;
     return;
   }
 
-  const btn = $('subscribePlanBtn');
-  const oldText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Abrindo checkout...';
+  const btn = document.querySelector(`[data-plan-code="${planCode}"]`);
+  const oldText = btn?.textContent || '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Abrindo checkout...'; }
 
   try {
     const { data, error } = await sb.functions.invoke('nexo-admin', {
-      body: { action: 'create_asaas_checkout' }
+      body: { action: 'create_asaas_checkout', plan_code: planCode }
     });
     if (error) {
       let message = error.message || 'Não foi possível abrir o checkout.';
@@ -376,8 +542,34 @@ async function startAsaasCheckout() {
   } catch (error) {
     console.error(error);
     alert('Não foi possível iniciar a assinatura: ' + (error?.message || error));
-    btn.disabled = false;
-    btn.textContent = oldText;
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  }
+}
+
+async function changeSubscriptionPlan(planCode) {
+  const target = planByCode(planCode);
+  const current = currentPlan();
+  if (!confirm(`Mudar de ${current.name} para ${target.name} por ${money(planPrice(target))}/mês?`)) return;
+
+  const btn = document.querySelector(`[data-plan-code="${planCode}"]`);
+  const oldText = btn?.textContent || '';
+  if (btn) { btn.disabled=true; btn.textContent='Alterando...'; }
+
+  try {
+    const { data, error } = await sb.functions.invoke('nexo-admin', {
+      body:{ action:'change_subscription_plan', plan_code:planCode }
+    });
+    if (error) {
+      let message=error.message||'Não foi possível mudar o plano.';
+      try { if(error.context?.json){const x=await error.context.json();message=x?.error||message;} } catch(_){}
+      throw new Error(message);
+    }
+    if(data?.error) throw new Error(data.error);
+    await loadBillingData();
+    alert(`Plano alterado para ${target.name}. ✨`);
+  } catch(err) {
+    alert(err.message||'Não foi possível mudar o plano.');
+    if(btn){btn.disabled=false;btn.textContent=oldText;}
   }
 }
 
@@ -415,6 +607,227 @@ async function handleBillingReturn() {
   const cleanUrl = new URL(window.location.href);
   cleanUrl.searchParams.delete('billing');
   window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+}
+
+
+function renderAccessExperience() {
+  if (!state.billingLoaded) return;
+  state.accessStatus = effectiveStatusFromSubscription(state.subscription);
+  const status = state.accessStatus;
+  const banner = $('accessStatusBanner');
+  const title = $('accessStatusTitle');
+  const text = $('accessStatusText');
+  const action = $('accessStatusAction');
+  if (!banner) return;
+
+  banner.className = `access-status-banner access-${status}`;
+  action.textContent = ['suspended','past_due','cancelled'].includes(status) ? 'Regularizar agora' : 'Ver assinatura';
+
+  if (status === 'trialing') {
+    const days = Math.max(0, (daysUntil(state.subscription?.trial_ends_at) ?? 0) + 1);
+    title.textContent = `👑 Teste NEXO Pro · ${days} dia${days===1?'':'s'} restante${days===1?'':'s'}`;
+    text.textContent = `Todos os recursos Pro estão liberados até ${fmtDate(state.subscription?.trial_ends_at)}.`;
+    banner.classList.remove('hidden');
+  } else if (status === 'grace') {
+    const days = Math.max(0, (daysUntil(state.subscription?.grace_ends_at) ?? 0) + 1);
+    title.textContent = `⏳ Carência · ${days} dia${days===1?'':'s'} restante${days===1?'':'s'}`;
+    text.textContent = 'Seu teste terminou. Seus recursos continuam liberados durante a carência.';
+    banner.classList.remove('hidden');
+  } else if (status === 'support') {
+    title.textContent = '🧡 NEXO Apoio ativo';
+    text.textContent = `Acesso gratuito até ${fmtDate(state.subscription?.support_extension_ends_at)}.${canUseProtection()?' A Proteção Financeira Pro continua disponível durante esse período.':''}`;
+    banner.classList.remove('hidden');
+  } else if (status === 'active') {
+    banner.classList.add('hidden');
+  } else {
+    title.textContent = status === 'past_due' ? '⚠️ Pagamento pendente' : '🔒 Acesso em modo somente leitura';
+    text.textContent = 'Seus dados continuam disponíveis. Assine o NEXO para voltar a lançar, pagar e editar informações.';
+    banner.classList.remove('hidden');
+  }
+
+  document.body.classList.toggle('nexo-read-only', !hasWriteAccess());
+  ['quickAddTop','mobileQuickAdd','newTransactionBtn','newAccountBtn','newCardBtn','newCategoryBtn','newIncomeSourceBtn'].forEach(id => {
+    const el=$(id); if(el) el.disabled=!hasWriteAccess();
+  });
+  renderTrialValuePanel();
+  renderProtectionPanel();
+}
+
+function trialPeriodTransactions() {
+  const start = state.subscription?.trial_started_at || addDaysIso(isoToday(), -29);
+  const end = state.subscription?.trial_ends_at || isoToday();
+  return state.transactions.filter(t => {
+    const d=t.purchase_date || t.due_date;
+    return t.status!=='cancelled' && d>=start && d<=end;
+  });
+}
+
+function renderTrialValuePanel() {
+  const panel=$('trialValuePanel'); if(!panel) return;
+  const show=state.accessStatus==='grace';
+  panel.classList.toggle('hidden',!show);
+  if(!show)return;
+  const items=trialPeriodTransactions();
+  const income=items.filter(t=>t.type==='income').reduce((a,t)=>a+Number(t.amount||0),0);
+  const expense=items.filter(t=>t.type==='expense').reduce((a,t)=>a+Number(t.amount||0),0);
+  $('trialValueIncome').textContent=money(income);
+  $('trialValueExpense').textContent=money(expense);
+  $('trialValueResult').textContent=money(income-expense);
+  $('trialValueTransactions').textContent=String(items.length);
+  const byCategory=new Map();
+  items.filter(t=>t.type==='expense').forEach(t=>{
+    const c=byId(state.categories,t.category_id);
+    const name=c?.name || 'Outros';
+    byCategory.set(name,(byCategory.get(name)||0)+Number(t.amount||0));
+  });
+  const top=[...byCategory.entries()].sort((a,b)=>b[1]-a[1])[0];
+  $('trialValueTopCategory').textContent=top ? `Categoria com maior gasto: ${top[0]} · ${money(top[1])}` : 'Você já construiu seu histórico financeiro no NEXO.';
+}
+
+function protectionSnapshot(extraExpense=0) {
+  const balance=state.accounts.reduce((s,a)=>s+Number(a.balance||0),0);
+  const today=isoToday();
+  const thirty=addDaysIso(today,30);
+  const nextIncome=state.transactions.filter(t=>t.type==='income'&&t.status!=='paid'&&t.status!=='cancelled'&&t.due_date>=today).sort((a,b)=>a.due_date.localeCompare(b.due_date))[0];
+  const horizon=nextIncome && nextIncome.due_date<=thirty ? nextIncome.due_date : thirty;
+  const commitments=[];
+  state.transactions.filter(t=>t.type==='expense'&&t.payment_method!=='credit'&&t.status==='pending'&&t.due_date>=today&&t.due_date<=horizon).forEach(t=>{
+    commitments.push({description:t.description,due_date:t.due_date,amount:Number(t.amount||0),kind:'Conta'});
+  });
+  state.invoices.filter(i=>invoiceOutstanding(i)>0&&i.due_date>=today&&i.due_date<=horizon).forEach(i=>{
+    const card=byId(state.cards,i.card_id);
+    commitments.push({description:`Fatura ${card?.name||'Cartão'}`,due_date:i.due_date,amount:invoiceOutstanding(i),kind:'Fatura'});
+  });
+  commitments.sort((a,b)=>a.due_date.localeCompare(b.due_date));
+  const reserved=commitments.reduce((s,c)=>s+c.amount,0);
+  const free=balance-reserved-Number(extraExpense||0);
+  const days=Math.max(1,(daysUntil(horizon)??30)+1);
+  return {balance,reserved,free,daily:Math.max(0,free/days),horizon,commitments};
+}
+
+function protectionEnabled() { return canUseProtection() && Boolean(state.profile?.protection_mode); }
+
+function renderProtectionPanel() {
+  const panel=$('protectionPanel'); if(!panel)return;
+  const entitled=canUseProtection();
+  const enabled=protectionEnabled();
+  panel.classList.toggle('protection-locked', !entitled);
+  $('protectionMetrics').classList.toggle('hidden',!enabled);
+  $('protectionCommitments').classList.toggle('hidden',!enabled);
+
+  if(!entitled){
+    $('toggleProtectionBtn').textContent='Conhecer NEXO Pro';
+    $('toggleProtectionBtn').className='btn btn-light protection-upgrade';
+    $('protectionTitle').textContent='👑 Proteção Financeira é um recurso Pro';
+    $('protectionSubtitle').textContent='No Pro, o NEXO reserva seus compromissos, calcula quanto está realmente livre e avisa o impacto antes de gastos de risco.';
+    return;
+  }
+
+  $('toggleProtectionBtn').textContent=enabled?'Desativar modo proteção':'Ativar modo proteção';
+  $('toggleProtectionBtn').className=enabled?'btn btn-light protection-on':'btn btn-light';
+  if(!enabled){
+    $('protectionTitle').textContent='Proteja o dinheiro das próximas contas';
+    $('protectionSubtitle').textContent='Recurso NEXO Pro: ative para reservar compromissos e receber alertas antes de novos gastos.';
+    return;
+  }
+  $('protectionTitle').textContent=state.profile?.protection_reason==='unemployment'?'🧡 Proteção ativa durante o NEXO Apoio':'🛡 Seu dinheiro protegido antes de novos gastos';
+  $('protectionSubtitle').textContent='O NEXO compara novos gastos com os compromissos já previstos e mostra o impacto antes de salvar.';
+  const snap=protectionSnapshot();
+  $('protectionBalance').textContent=money(snap.balance);
+  $('protectionReserved').textContent=money(snap.reserved);
+  $('protectionFree').textContent=money(snap.free);
+  $('protectionDaily').textContent=money(snap.daily);
+  $('protectionCommitments').innerHTML=snap.commitments.length
+    ? `<strong>Próximos valores que merecem ficar reservados</strong>${snap.commitments.slice(0,4).map(c=>`<div><span>Você precisa guardar <b>${money(c.amount)}</b> para ${escapeHtml(c.description)}</span><small>até ${fmtDate(c.due_date)}</small></div>`).join('')}`
+    : '<strong>Nenhum compromisso pendente até o próximo horizonte de planejamento. 👍</strong>';
+}
+
+async function toggleProtectionMode() {
+  if(!canUseProtection()) {
+    switchView('subscription');
+    return;
+  }
+  const enabled=!protectionEnabled();
+  const {error}=await sb.from('profiles').update({protection_mode:enabled,protection_reason:enabled?(state.profile?.protection_reason||'manual'):null}).eq('id',uid());
+  if(error)return alert('Não foi possível alterar o Modo Proteção: '+error.message);
+  state.profile.protection_mode=enabled;
+  state.profile.protection_reason=enabled?(state.profile.protection_reason||'manual'):null;
+  renderProtectionPanel();
+}
+
+function confirmProtectionSpend({amount,description,category}) {
+  if (!protectionEnabled()) return Promise.resolve('continue');
+  const snap=protectionSnapshot(amount);
+  const group=category?.group_name || 'other';
+  const needsWarning=['leisure','nonessential','other'].includes(group) || snap.free < 0 || amount > Math.max(50, (snap.balance-snap.reserved)*0.12);
+  if(!needsWarning)return Promise.resolve('continue');
+  const next=snap.commitments[0];
+  $('protectionSpendMessage').innerHTML=`
+    <div class="protection-impact"><span>Gasto</span><strong>${money(amount)} · ${escapeHtml(description)}</strong></div>
+    <div class="protection-impact"><span>Livre após este gasto</span><strong class="${snap.free<0?'danger-text':''}">${money(snap.free)}</strong></div>
+    ${next?`<p>Você ainda precisa manter <strong>${money(next.amount)}</strong> reservado para <strong>${escapeHtml(next.description)}</strong>, com vencimento em ${fmtDate(next.due_date)}.</p>`:''}
+    <p>${snap.free<0?'⚠️ Este gasto usa parte do dinheiro necessário para compromissos já previstos.':'O gasto cabe no saldo livre calculado, mas merece atenção enquanto o Modo Proteção estiver ativo.'}</p>`;
+  $('protectionSpendModal').showModal();
+  return new Promise(resolve=>{state.protectionSpendResolver=resolve;});
+}
+
+function resolveProtectionSpend(decision) {
+  if($('protectionSpendModal')?.open)$('protectionSpendModal').close();
+  const resolve=state.protectionSpendResolver; state.protectionSpendResolver=null;
+  if(resolve)resolve(decision);
+}
+
+function renderNexoSupportStatus() {
+  const box=$('nexoSupportRequestStatus'); const btn=$('requestNexoSupportBtn');
+  if(!box||!btn)return;
+  if(!canUseSupport()) {
+    box.classList.remove('hidden');
+    box.innerHTML='<strong>Disponível no Plus e Pro</strong><span>O NEXO Apoio pode conceder +30 dias em caso de desemprego comprovado.</span>';
+    btn.disabled=false; btn.textContent='Conhecer NEXO Plus';
+    return;
+  }
+  const req=state.supportBenefitRequest;
+  if(!req){box.classList.add('hidden');btn.disabled=false;btn.textContent='Solicitar NEXO Apoio';return;}
+  box.classList.remove('hidden');
+  const labels={pending:'Em análise',approved:'Aprovado',rejected:'Não aprovado',cancelled:'Cancelado'};
+  box.innerHTML=`<strong>${labels[req.status]||req.status}</strong><span>${req.status==='pending'?'Recebemos seu pedido. O comprovante fica disponível apenas para análise administrativa.':req.status==='approved'?`30 dias extras concedidos: ${fmtDate(req.extension_start)} a ${fmtDate(req.extension_end)}.`:req.decision_note||'Você pode falar com o suporte se precisar de ajuda.'}</span>`;
+  const approvedAt=req.reviewed_at?new Date(req.reviewed_at).getTime():0;
+  const approvedWithinYear=req.status==='approved' && approvedAt && (Date.now()-approvedAt)<365*86400000;
+  btn.disabled=req.status==='pending' || approvedWithinYear;
+  btn.textContent=req.status==='pending'?'Solicitação em análise':approvedWithinYear?'NEXO Apoio concedido ✓':'Solicitar NEXO Apoio';
+}
+
+function openNexoSupport() {
+  if(!canUseSupport()) { switchView('subscription'); return; }
+  if(state.subscription?.status==='past_due') return alert('Existe uma cobrança pendente. Regularize a assinatura antes de solicitar o NEXO Apoio.');
+  if(state.supportBenefitRequest?.status==='pending') return alert('Sua solicitação já está em análise.');
+  $('nexoSupportForm').reset(); $('nexoSupportFormMessage').textContent=''; $('unemploymentDate').value=isoToday(); $('nexoSupportModal').showModal();
+}
+
+async function submitNexoSupport(e) {
+  e.preventDefault();
+  const file=$('unemploymentDocument').files?.[0];
+  if(!file)return;
+  if(file.size>8*1024*1024)return alert('O comprovante pode ter no máximo 8 MB.');
+  const allowed=['application/pdf','image/jpeg','image/png'];
+  if(!allowed.includes(file.type))return alert('Envie um PDF, JPG ou PNG.');
+  const btn=$('submitNexoSupportBtn'); const msg=$('nexoSupportFormMessage');
+  btn.disabled=true;msg.dataset.type='info';msg.textContent='Enviando comprovante com segurança...';
+  const ext=file.type==='application/pdf'?'pdf':file.type==='image/png'?'png':'jpg';
+  const path=`${uid()}/${crypto.randomUUID()}.${ext}`;
+  try{
+    const upload=await sb.storage.from('nexo-support-documents').upload(path,file,{upsert:false,contentType:file.type});
+    if(upload.error)throw upload.error;
+    const {data,error}=await sb.functions.invoke('nexo-admin',{body:{action:'submit_unemployment_support',unemployment_date:$('unemploymentDate').value,document_path:path,message:$('unemploymentMessage').value.trim()}});
+    if(error){let m=error.message;try{if(error.context?.json){const x=await error.context.json();m=x?.error||m;}}catch(_){}throw new Error(m);}
+    if(data?.error)throw new Error(data.error);
+    msg.dataset.type='success';msg.textContent=data.message||'Solicitação enviada.';
+    if(canUseProtection()){state.profile.protection_mode=true;state.profile.protection_reason='unemployment';}
+    setTimeout(async()=>{$('nexoSupportModal').close();await loadBillingData();renderProtectionPanel();},1200);
+  }catch(err){
+    await sb.storage.from('nexo-support-documents').remove([path]).catch(()=>null);
+    msg.dataset.type='error';msg.textContent=err.message||'Não foi possível enviar a solicitação.';
+  }finally{btn.disabled=false;}
 }
 
 async function syncCardInvoices() {
@@ -571,6 +984,7 @@ async function ensureDefaults() {
 }
 
 function renderAll() {
+  applyPlanTheme();
   renderUser();
   fillSelects();
   renderDashboard();
@@ -580,6 +994,7 @@ function renderAll() {
   renderAccounts();
   renderSubscription();
   renderSettings();
+  if (state.billingLoaded) renderAccessExperience();
 }
 
 function renderUser() {
@@ -699,6 +1114,7 @@ function paymentLabel(t) {
 }
 
 function tableTransactions(items, actions=true) {
+  if (!hasWriteAccess()) actions=false;
   if (!items.length) return `<div class="empty-state">Nenhum lançamento encontrado.</div>`;
   return `<table class="data-table"><thead><tr><th>Descrição</th><th>Compra / lançamento</th><th>Vencimento</th><th>Categoria / origem</th><th>Pagamento</th><th>Status</th><th>Valor</th>${actions?'<th></th>':''}</tr></thead><tbody>` + items.map(t => {
     const cat = t.type === 'expense' ? byId(state.categories, t.category_id) : byId(state.incomeSources, t.income_source_id);
@@ -846,6 +1262,7 @@ function openInvoice(id) {
 }
 
 function openInvoicePayment(id) {
+  if(!requireWriteAccess()) return;
   const invoice = state.invoices.find(i=>i.id===id);
   if (!invoice) return alert('Fatura não encontrada.');
   const card = byId(state.cards, invoice.card_id);
@@ -868,6 +1285,7 @@ function openInvoicePayment(id) {
 
 async function payInvoice(e) {
   e.preventDefault();
+  if(!requireWriteAccess()) return;
   const invoice = state.invoices.find(i=>i.id===$('invoicePaymentId').value);
   if (!invoice) return alert('Fatura não encontrada.');
 
@@ -916,6 +1334,14 @@ function sourceTypeLabel(v){return {recurring:'Recorrente',variable:'Variável',
 
 function wireEvents() {
   $('logoutBtn').addEventListener('click', async()=>{ await sb.auth.signOut(); window.location.href='index.html'; });
+  $('accessStatusAction')?.addEventListener('click',()=>switchView('subscription'));
+  $('toggleProtectionBtn')?.addEventListener('click',toggleProtectionMode);
+  $('requestNexoSupportBtn')?.addEventListener('click',openNexoSupport);
+  $('nexoSupportForm')?.addEventListener('submit',submitNexoSupport);
+  $('protectionSpendCancel')?.addEventListener('click',()=>resolveProtectionSpend('cancel'));
+  $('protectionSpendClose')?.addEventListener('click',()=>resolveProtectionSpend('cancel'));
+  $('protectionSpendContinue')?.addEventListener('click',()=>resolveProtectionSpend('continue'));
+  $('protectionSpendEssential')?.addEventListener('click',()=>resolveProtectionSpend('essential'));
   $('monthFilter').addEventListener('change', e=>{ state.selectedMonth=e.target.value; renderAll(); });
 
   document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', ()=>switchView(btn.dataset.view)));
@@ -926,7 +1352,6 @@ function wireEvents() {
   $('newCardBtn').addEventListener('click', ()=>openCard());
   $('newCategoryBtn').addEventListener('click', ()=>openCategory());
   $('newIncomeSourceBtn').addEventListener('click', ()=>openIncomeSource());
-  $('subscribePlanBtn').addEventListener('click', startAsaasCheckout);
 
   document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', ()=>$(btn.dataset.close).close()));
   document.querySelectorAll('.type-option').forEach(btn=>btn.addEventListener('click',()=>setTransactionType(btn.dataset.type)));
@@ -953,6 +1378,13 @@ function wireEvents() {
   $('transactionStatusFilter').addEventListener('change', renderTransactions);
 
   document.body.addEventListener('click', async (e)=>{
+    const planAction = e.target.closest('[data-plan-action]');
+    if(planAction) {
+      const action=planAction.dataset.planAction; const code=planAction.dataset.planCode;
+      if(action==='checkout') return startAsaasCheckout(code);
+      if(action==='change') return changeSubscriptionPlan(code);
+      return;
+    }
     const payInvoiceBtn = e.target.closest('[data-pay-invoice]'); if(payInvoiceBtn) return openInvoicePayment(payInvoiceBtn.dataset.payInvoice);
     const openInvoiceBtn = e.target.closest('[data-open-invoice]'); if(openInvoiceBtn && openInvoiceBtn.dataset.openInvoice) return openInvoice(openInvoiceBtn.dataset.openInvoice);
     const pay = e.target.closest('[data-pay]'); if(pay) return markPaid(pay.dataset.pay);
@@ -989,6 +1421,7 @@ function setTransactionType(type) {
 }
 
 function openTransaction() {
+  if(!requireWriteAccess()) return;
   $('transactionForm').reset();
   $('transactionId').value='';
   $('transactionAmount').value='';
@@ -1031,6 +1464,7 @@ function updateCreditDueDate(){
 
 async function saveTransaction(e) {
   e.preventDefault();
+  if(!requireWriteAccess()) return;
   const totalAmount=parseMoney($('transactionAmount').value);
   if(totalAmount<=0) return alert('Informe um valor maior que zero.');
   const type=state.transactionType;
@@ -1042,6 +1476,14 @@ async function saveTransaction(e) {
   const method= type==='expense' ? $('paymentMethod').value : 'income';
   const purchaseDate = $('transactionPurchaseDate').value || isoToday();
   if(type==='expense' && method==='credit'){ status='pending'; paidAt=null; }
+
+  let essentialOverride=false;
+  if(type==='expense' && protectionEnabled()){
+    const category=byId(state.categories,$('transactionCategory').value);
+    const decision=await confirmProtectionSpend({amount:totalAmount,description,category});
+    if(decision==='cancel') return;
+    essentialOverride=decision==='essential';
+  }
 
   const installments = type==='expense' && method==='credit' ? Math.max(1, Number($('transactionInstallments').value||1)) : 1;
   const group = installments > 1 ? crypto.randomUUID() : null;
@@ -1069,6 +1511,7 @@ async function saveTransaction(e) {
       category_id: type==='expense' ? ($('transactionCategory').value||null) : null,
       income_source_id: type==='income' ? ($('transactionIncomeSource').value||null) : null,
       notes:$('transactionNotes').value.trim()||null,
+      is_essential_override:essentialOverride,
       installment_group:group, installment_number:installments>1?i:null, installment_total:installments>1?installments:null
     });
   }
@@ -1108,6 +1551,7 @@ async function applyBalanceForTransaction(t, direction=1) {
 }
 
 async function markPaid(id) {
+  if(!requireWriteAccess()) return;
   const t=state.transactions.find(x=>x.id===id); if(!t||t.status!=='pending')return;
   if (t.payment_method === 'credit') {
     const invoice = invoiceForTransaction(t);
@@ -1122,6 +1566,7 @@ async function markPaid(id) {
 }
 
 async function cancelTransaction(id) {
+  if(!requireWriteAccess()) return;
   const t=state.transactions.find(x=>x.id===id); if(!t||t.status!=='pending')return;
   if (t.payment_method === 'credit') {
     const invoice = invoiceForTransaction(t);
@@ -1136,19 +1581,22 @@ async function cancelTransaction(id) {
 }
 
 function openAccount(id='') {
+  if(!requireWriteAccess()) return;
   $('accountForm').reset(); $('accountId').value=id;
   if(id){const a=byId(state.accounts,id); $('accountName').value=a.name; $('accountType').value=a.type; $('accountBalance').value=Number(a.balance).toFixed(2).replace('.',',');}
   $('accountModal').showModal();
 }
-async function saveAccount(e){e.preventDefault();const id=$('accountId').value;const payload={user_id:uid(),name:$('accountName').value.trim(),type:$('accountType').value,balance:parseMoney($('accountBalance').value)};const q=id?sb.from('accounts').update(payload).eq('id',id).eq('user_id',uid()):sb.from('accounts').insert(payload);const{error}=await q;if(error)return alert(error.message);$('accountModal').close();await refresh();}
+async function saveAccount(e){e.preventDefault();if(!requireWriteAccess())return;const id=$('accountId').value;const payload={user_id:uid(),name:$('accountName').value.trim(),type:$('accountType').value,balance:parseMoney($('accountBalance').value)};const q=id?sb.from('accounts').update(payload).eq('id',id).eq('user_id',uid()):sb.from('accounts').insert(payload);const{error}=await q;if(error)return alert(error.message);$('accountModal').close();await refresh();}
 
 function openCard(id='') {
+  if(!requireWriteAccess()) return;
   $('cardForm').reset(); $('cardId').value=id; fillSelects();
   if(id){const c=byId(state.cards,id);$('cardName').value=c.name;$('cardIssuer').value=c.issuer||'';$('cardLimit').value=Number(c.credit_limit).toFixed(2).replace('.',',');$('cardClosingDay').value=c.closing_day;$('cardDueDay').value=c.due_day;$('cardPaymentAccount').value=c.payment_account_id||'';}
   $('cardModal').showModal();
 }
 async function saveCard(e){
   e.preventDefault();
+  if(!requireWriteAccess()) return;
   const id=$('cardId').value;
   const payload={
     user_id:uid(),
@@ -1176,11 +1624,11 @@ async function saveCard(e){
   renderAll();
 }
 
-function openCategory(id=''){ $('categoryForm').reset();$('categoryId').value=id;if(id){const c=byId(state.categories,id);$('categoryName').value=c.name;$('categoryGroup').value=c.group_name;$('categoryIcon').value=c.icon||'';}$('categoryModal').showModal();}
-async function saveCategory(e){e.preventDefault();const id=$('categoryId').value;const payload={user_id:uid(),name:$('categoryName').value.trim(),group_name:$('categoryGroup').value,icon:$('categoryIcon').value.trim()||null};const q=id?sb.from('categories').update(payload).eq('id',id).eq('user_id',uid()):sb.from('categories').insert(payload);const{error}=await q;if(error)return alert(error.message);$('categoryModal').close();await refresh();}
+function openCategory(id=''){ if(!requireWriteAccess())return; $('categoryForm').reset();$('categoryId').value=id;if(id){const c=byId(state.categories,id);$('categoryName').value=c.name;$('categoryGroup').value=c.group_name;$('categoryIcon').value=c.icon||'';}$('categoryModal').showModal();}
+async function saveCategory(e){e.preventDefault();if(!requireWriteAccess())return;const id=$('categoryId').value;const payload={user_id:uid(),name:$('categoryName').value.trim(),group_name:$('categoryGroup').value,icon:$('categoryIcon').value.trim()||null};const q=id?sb.from('categories').update(payload).eq('id',id).eq('user_id',uid()):sb.from('categories').insert(payload);const{error}=await q;if(error)return alert(error.message);$('categoryModal').close();await refresh();}
 
-function openIncomeSource(id=''){ $('incomeSourceForm').reset();$('incomeSourceId').value=id;if(id){const s=byId(state.incomeSources,id);$('incomeSourceName').value=s.name;$('incomeSourceType').value=s.source_type;$('incomeSourceDefaultAmount').value=s.default_amount?Number(s.default_amount).toFixed(2).replace('.',','):'';$('incomeSourceDay').value=s.expected_day||'';}$('incomeSourceModal').showModal();}
-async function saveIncomeSource(e){e.preventDefault();const id=$('incomeSourceId').value;const amt=parseMoney($('incomeSourceDefaultAmount').value);const payload={user_id:uid(),name:$('incomeSourceName').value.trim(),source_type:$('incomeSourceType').value,default_amount:amt||null,expected_day:$('incomeSourceDay').value?Number($('incomeSourceDay').value):null};const q=id?sb.from('income_sources').update(payload).eq('id',id).eq('user_id',uid()):sb.from('income_sources').insert(payload);const{error}=await q;if(error)return alert(error.message);$('incomeSourceModal').close();await refresh();}
+function openIncomeSource(id=''){ if(!requireWriteAccess())return; $('incomeSourceForm').reset();$('incomeSourceId').value=id;if(id){const s=byId(state.incomeSources,id);$('incomeSourceName').value=s.name;$('incomeSourceType').value=s.source_type;$('incomeSourceDefaultAmount').value=s.default_amount?Number(s.default_amount).toFixed(2).replace('.',','):'';$('incomeSourceDay').value=s.expected_day||'';}$('incomeSourceModal').showModal();}
+async function saveIncomeSource(e){e.preventDefault();if(!requireWriteAccess())return;const id=$('incomeSourceId').value;const amt=parseMoney($('incomeSourceDefaultAmount').value);const payload={user_id:uid(),name:$('incomeSourceName').value.trim(),source_type:$('incomeSourceType').value,default_amount:amt||null,expected_day:$('incomeSourceDay').value?Number($('incomeSourceDay').value):null};const q=id?sb.from('income_sources').update(payload).eq('id',id).eq('user_id',uid()):sb.from('income_sources').insert(payload);const{error}=await q;if(error)return alert(error.message);$('incomeSourceModal').close();await refresh();}
 
 async function refresh(){
   await loadData();

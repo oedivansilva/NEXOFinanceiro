@@ -9,3 +9,15 @@
 .asaas-integration-card>div{display:flex;flex-direction:column;gap:5px}.asaas-integration-card small{color:#69707d;line-height:1.45}
 .admin-mini-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.admin-mini-metrics>div{padding:16px;border:1px solid #eceef3;border-radius:14px;background:#fbfcff;display:flex;flex-direction:column;gap:4px}.admin-mini-metrics span{font-size:11px;text-transform:uppercase;color:#737986;font-weight:700}.admin-mini-metrics strong{font-size:22px}
 @media(max-width:760px){.asaas-integration-card{align-items:stretch;flex-direction:column}.admin-mini-metrics{grid-template-columns:1fr}}
+
+/* V8 — NEXO Apoio */
+.admin-nav-count{margin-left:auto;min-width:20px;height:20px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px;background:#ee4d2d;color:#fff;font-size:10px}
+.admin-summary-card.support-highlight{background:#fff5f0;border-color:#ffd6ca}.admin-summary-card.support-highlight strong{color:#df4528}
+.admin-benefit-info{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;background:#fff7f3;border:1px solid #ffd9ce;margin-bottom:14px}.admin-benefit-info strong{font-size:12px;color:#d94427}.admin-benefit-info span{font-size:11px;color:#6d615d}
+.support-benefit-row{border-left:3px solid #ee4d2d}
+.admin-summary-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.admin-status-badge.support{background:#fff1ec;color:#d84427}
+@media(max-width:1180px){.admin-summary-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1000px){.admin-summary-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:720px){.admin-nav{grid-template-columns:repeat(6,1fr)}.admin-nav-count{position:absolute;transform:translate(10px,-8px);min-width:16px;height:16px;font-size:8px;padding:0 4px}}
+.admin-nav-item{position:relative}

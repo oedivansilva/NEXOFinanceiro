@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=7.1" />
+  <link rel="stylesheet" href="style.css?v=9.0" />
 </head>
 <body>
   <header class="nexo-topbar app-global-topbar">
@@ -18,10 +18,16 @@
     </div>
     <div class="nexo-userbox">
       <div><strong id="userMini">Carregando...</strong><small>Finanças pessoais</small></div>
+      <span id="planThemeBadge" class="plan-theme-badge plan-theme-essential">ESSENCIAL</span>
       <button id="adminPanelBtn" class="btn btn-light hidden" type="button" onclick="window.location.href='admin.html'">🛡 Admin</button>
       <button id="logoutBtn" class="btn btn-light">Sair</button>
     </div>
   </header>
+
+  <div id="accessStatusBanner" class="access-status-banner hidden">
+    <div><strong id="accessStatusTitle">Período de teste</strong><span id="accessStatusText"></span></div>
+    <button id="accessStatusAction" class="btn btn-light" type="button">Ver assinatura</button>
+  </div>
 
   <div class="app-layout">
     <aside class="sidebar">
@@ -60,6 +66,42 @@
           <article class="summary-card"><span>Despesas do mês</span><strong id="expenseMonth">R$ 0,00</strong><small>Pagas + pendentes</small></article>
           <article class="summary-card highlight"><span>Saldo projetado</span><strong id="projectedBalance">R$ 0,00</strong><small>Saldo + receitas pendentes − despesas pendentes</small></article>
         </div>
+
+        <article id="trialValuePanel" class="trial-value-panel hidden">
+          <div class="trial-value-copy">
+            <p class="eyebrow">SEU MÊS COM O NEXO</p>
+            <h2>Seu teste terminou. Olha o que você organizou nesses 30 dias 👀</h2>
+            <p>Seus dados continuam disponíveis. Durante a carência você ainda pode usar o NEXO normalmente e decidir se quer continuar.</p>
+          </div>
+          <div class="trial-value-metrics">
+            <div><span>Você recebeu</span><strong id="trialValueIncome">R$ 0,00</strong></div>
+            <div><span>Você gastou</span><strong id="trialValueExpense">R$ 0,00</strong></div>
+            <div><span>Resultado</span><strong id="trialValueResult">R$ 0,00</strong></div>
+            <div><span>Movimentações</span><strong id="trialValueTransactions">0</strong></div>
+          </div>
+          <div class="trial-value-footer">
+            <span id="trialValueTopCategory">Sua categoria mais movimentada aparecerá aqui.</span>
+            <button type="button" class="btn btn-primary" data-jump="subscription">Escolher meu plano</button>
+          </div>
+        </article>
+
+        <article id="protectionPanel" class="protection-panel">
+          <div class="protection-panel-head">
+            <div>
+              <p class="eyebrow">MODO PROTEÇÃO FINANCEIRA</p>
+              <h2 id="protectionTitle">Proteja o dinheiro das próximas contas</h2>
+              <p id="protectionSubtitle">Ative para o NEXO avisar quanto precisa ficar reservado antes de novos gastos.</p>
+            </div>
+            <button id="toggleProtectionBtn" type="button" class="btn btn-light">Ativar modo proteção</button>
+          </div>
+          <div id="protectionMetrics" class="protection-metrics hidden">
+            <div><span>Saldo em contas</span><strong id="protectionBalance">R$ 0,00</strong></div>
+            <div><span>Reservado para compromissos</span><strong id="protectionReserved">R$ 0,00</strong></div>
+            <div><span>Livre para uso</span><strong id="protectionFree">R$ 0,00</strong></div>
+            <div><span>Meta diária segura</span><strong id="protectionDaily">R$ 0,00</strong></div>
+          </div>
+          <div id="protectionCommitments" class="protection-commitments hidden"></div>
+        </article>
 
         <div class="dashboard-grid">
           <article class="panel">
@@ -114,61 +156,55 @@
       </section>
 
       <section id="subscriptionView" class="view">
-        <div class="subscription-grid">
-          <article class="subscription-plan-card">
-            <div class="subscription-plan-top">
-              <div>
-                <p class="eyebrow">PLANO NEXO</p>
-                <h2 id="subscriptionPlanName">NEXO Financeiro Pessoal</h2>
-                <p id="subscriptionPlanDescription" class="subscription-description">Controle de contas, cartões, faturas e planejamento financeiro em um único lugar.</p>
-              </div>
-              <span id="subscriptionStatusBadge" class="subscription-status subscription-status-none">Não assinante</span>
-            </div>
+        <div id="trialPlanMessage" class="trial-plan-message hidden"></div>
 
-            <div class="subscription-price-row">
-              <strong id="subscriptionPrice">R$ 19,90</strong><span>/ mês</span>
+        <article class="panel plans-intro-panel">
+          <div class="panel-head wrap">
+            <div>
+              <p class="eyebrow">PLANOS NEXO</p>
+              <h2>Escolha a experiência que combina com seu momento</h2>
+              <p class="muted">Todo novo cadastro experimenta o NEXO Pro completo por 30 dias. Depois, você escolhe como continuar.</p>
             </div>
+            <span id="subscriptionStatusBadge" class="subscription-status subscription-status-none">Não assinante</span>
+          </div>
+          <div id="planOptionsGrid" class="plan-options-grid"></div>
+          <p id="subscriptionActionHelp" class="subscription-help">Carregando informações da assinatura...</p>
+        </article>
 
-            <div class="subscription-provider">
-              <div class="provider-mark provider-asaas">A</div>
-              <div>
-                <strong>Cobrança automática pelo Asaas</strong>
-                <small>Pagamento seguro e renovação mensal no cartão. A liberação acontece automaticamente após a confirmação.</small>
-              </div>
-            </div>
-
-            <div class="subscription-features">
-              <div><span>✓</span><strong>Contas e saldos</strong></div>
-              <div><span>✓</span><strong>Cartões e faturas</strong></div>
-              <div><span>✓</span><strong>Planejamento mensal</strong></div>
-              <div><span>✓</span><strong>Histórico financeiro</strong></div>
-            </div>
-
-            <div class="subscription-actions">
-              <button id="subscribePlanBtn" type="button" class="btn btn-primary">Assinar por R$ 19,90/mês</button>
-            </div>
-            <p id="subscriptionActionHelp" class="subscription-help">Ao assinar, você será levado ao checkout seguro do Asaas. O NEXO recebe a confirmação automaticamente.</p>
-          </article>
-
+        <div class="subscription-grid subscription-account-grid">
           <article class="panel subscription-details-card">
             <div class="panel-head"><div><p class="eyebrow">MINHA CONTA</p><h2>Minha assinatura</h2></div></div>
             <div class="subscription-detail-list">
-              <div><span>Plano</span><strong id="subscriptionDetailPlan">NEXO Financeiro Pessoal</strong></div>
+              <div><span>Plano</span><strong id="subscriptionDetailPlan">—</strong></div>
               <div><span>Status</span><strong id="subscriptionDetailStatus">Carregando...</strong></div>
               <div><span>Início</span><strong id="subscriptionDetailStarted">—</strong></div>
               <div><span>Próxima cobrança</span><strong id="subscriptionDetailNextBilling">—</strong></div>
               <div><span>Último pagamento</span><strong id="subscriptionDetailLastPayment">—</strong></div>
+              <div><span>Fim do teste</span><strong id="subscriptionDetailTrialEnd">—</strong></div>
+              <div><span>Acesso gratuito até</span><strong id="subscriptionDetailAccessUntil">—</strong></div>
             </div>
             <div id="subscriptionCheckoutBox" class="subscription-request-box hidden"></div>
+          </article>
+
+          <article class="panel nexo-support-benefit subscription-support-card">
+            <div class="panel-head wrap">
+              <div>
+                <p class="eyebrow">🧡 NEXO APOIO</p>
+                <h2>Ficou desempregado?</h2>
+                <p class="muted">Benefício dos planos Plus e Pro. Com comprovação do desligamento, você pode receber +30 dias sem cobrança, conforme as regras do benefício.</p>
+              </div>
+              <button id="requestNexoSupportBtn" type="button" class="btn btn-light">Solicitar NEXO Apoio</button>
+            </div>
+            <div id="nexoSupportRequestStatus" class="nexo-support-status hidden"></div>
           </article>
         </div>
 
         <article class="panel subscription-how">
           <div class="panel-head"><div><p class="eyebrow">AUTOMÁTICO</p><h2>Do pagamento ao acesso, sem espera</h2></div></div>
           <div class="subscription-steps">
-            <div><span>1</span><div><strong>Assine</strong><small>Você informa o cartão no checkout hospedado e seguro do Asaas.</small></div></div>
-            <div><span>2</span><div><strong>Asaas confirma</strong><small>O pagamento aprovado gera um evento automático para o NEXO.</small></div></div>
-            <div><span>3</span><div><strong>NEXO libera</strong><small>Sua assinatura muda para ativa sem depender de aprovação manual.</small></div></div>
+            <div><span>1</span><div><strong>Escolha seu plano</strong><small>Essencial, Plus ou Pro — o checkout é criado com o valor correto.</small></div></div>
+            <div><span>2</span><div><strong>Asaas confirma</strong><small>O pagamento aprovado envia um evento automático para o NEXO.</small></div></div>
+            <div><span>3</span><div><strong>NEXO libera</strong><small>O plano, os recursos e a identidade visual são aplicados automaticamente.</small></div></div>
           </div>
         </article>
       </section>
@@ -316,6 +352,46 @@
     </form>
   </dialog>
 
+  <dialog id="nexoSupportModal" class="modal">
+    <form id="nexoSupportForm" method="dialog" class="modal-card wide">
+      <div class="modal-head">
+        <div><p class="eyebrow">🧡 NEXO APOIO</p><h2>Solicitar 30 dias extras</h2></div>
+        <button type="button" class="icon-btn" data-close="nexoSupportModal">×</button>
+      </div>
+      <div class="support-privacy-note">
+        <strong>Privacidade primeiro</strong>
+        <span>Envie somente a tela/página da CTPS Digital que mostre o vínculo mais recente e o desligamento. O comprovante será removido após a análise.</span>
+      </div>
+      <label>Data do desligamento
+        <input id="unemploymentDate" type="date" required />
+      </label>
+      <label>Comprovante da CTPS Digital
+        <input id="unemploymentDocument" type="file" accept="application/pdf,image/jpeg,image/png" required />
+        <small class="field-help">PDF, JPG ou PNG. Máximo 8 MB.</small>
+      </label>
+      <label>Mensagem (opcional)
+        <textarea id="unemploymentMessage" rows="3" placeholder="Se quiser, conte brevemente o que aconteceu."></textarea>
+      </label>
+      <p id="nexoSupportFormMessage" class="form-message"></p>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close="nexoSupportModal">Cancelar</button><button id="submitNexoSupportBtn" type="submit" class="btn btn-primary">Enviar solicitação</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="protectionSpendModal" class="modal">
+    <div class="modal-card protection-spend-card">
+      <div class="modal-head">
+        <div><p class="eyebrow">MODO PROTEÇÃO</p><h2>Esse gasto merece atenção</h2></div>
+        <button type="button" id="protectionSpendClose" class="icon-btn">×</button>
+      </div>
+      <div id="protectionSpendMessage" class="protection-spend-message"></div>
+      <div class="protection-spend-actions">
+        <button id="protectionSpendCancel" type="button" class="btn btn-ghost">Voltar</button>
+        <button id="protectionSpendEssential" type="button" class="btn btn-light">Este gasto é essencial</button>
+        <button id="protectionSpendContinue" type="button" class="btn btn-primary">Registrar mesmo assim</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="accountModal" class="modal">
     <form id="accountForm" method="dialog" class="modal-card">
       <div class="modal-head"><h2>Conta</h2><button type="button" class="icon-btn" data-close="accountModal">×</button></div>
@@ -364,7 +440,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=7.1"></script>
-  <script src="app.js?v=7.1"></script>
+  <script src="supabase-config.js?v=9.0"></script>
+  <script src="app.js?v=9.0"></script>
 </body>
 </html>

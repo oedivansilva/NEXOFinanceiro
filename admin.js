@@ -4,7 +4,7 @@ const adminState = {
   session: null,
   user: null,
   profile: null,
-  data: { users: [], subscriptions: [], payments: [], tickets: [], plans: [], audit: [], provider_settings: null, summary: {} },
+  data: { users: [], subscriptions: [], payments: [], tickets: [], support_benefits: [], plans: [], audit: [], provider_settings: null, summary: {} },
   selectedUser: null,
   view: 'overview'
 };
@@ -19,7 +19,7 @@ function roleLabel(role) {
   return { owner:'Proprietário', admin:'Administrador', support:'Suporte', user:'Usuário' }[role] || 'Usuário';
 }
 function subscriptionLabel(status) {
-  return { active:'Ativa', trialing:'Teste', past_due:'Pagamento pendente', grace:'Carência', suspended:'Suspensa', cancelled:'Cancelada' }[status] || 'Sem assinatura';
+  return { active:'Ativa', trialing:'Teste', past_due:'Pagamento pendente', grace:'Carência', support:'NEXO Apoio', suspended:'Suspensa', cancelled:'Cancelada' }[status] || 'Sem assinatura';
 }
 function requestLabel(status) {
   return { pending:'Pendente', approved:'Aprovada', rejected:'Recusada', cancelled:'Cancelada' }[status] || status;
@@ -102,11 +102,14 @@ function renderAdminAll() {
   $('adminActiveSubsCount').textContent = s.active_subscriptions || 0;
   $('adminMrr').textContent = money(s.mrr || 0);
   $('adminOpenTicketsCount').textContent = s.open_tickets || 0;
+  $('adminPendingBenefitsCount').textContent = s.pending_support_benefits || 0;
+  const navCount=$('supportBenefitNavCount'); if(navCount){navCount.textContent=s.pending_support_benefits||0;navCount.classList.toggle('hidden',!(s.pending_support_benefits||0));}
 
   renderOverview();
   renderUsers();
   renderSubscriptions();
   renderSupport();
+  renderBenefits();
   renderAudit();
 }
 
@@ -114,12 +117,21 @@ function userName(user) {
   return user?.full_name || user?.email || 'Usuário';
 }
 
+function adminPlanById(planId) {
+  return (adminState.data.plans || []).find(p => p.id === planId) || null;
+}
+
+function adminPlanName(sub) {
+  const p=adminPlanById(sub?.plan_id);
+  return p?.name || (['trialing','grace'].includes(sub?.status)?'NEXO Pro · teste':'NEXO');
+}
+
 function renderOverview() {
   const subs = [...(adminState.data.subscriptions || [])].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,5);
   $('overviewSubscriptions').innerHTML = subs.length ? subs.map(sub => {
     const user = (adminState.data.users || []).find(u => u.id === sub.user_id);
     return `<div class="admin-row-card">
-      <div class="admin-row-card-main"><strong>${esc(userName(user))}</strong><small>${esc(user?.email || '')} · próxima cobrança ${fmtDate(sub.next_billing_at)}</small></div>
+      <div class="admin-row-card-main"><strong>${esc(userName(user))}</strong><small>${esc(user?.email || '')} · ${esc(adminPlanName(sub))} · próxima cobrança ${fmtDate(sub.next_billing_at)}</small></div>
       <span class="admin-status-badge ${sub.status}">${subscriptionLabel(sub.status)}</span>
     </div>`;
   }).join('') : '<div class="admin-empty">Nenhuma assinatura cadastrada.</div>';
@@ -143,7 +155,7 @@ function usersTable(users, actions = true) {
       <td><strong>${esc(userName(u))}</strong><small>${esc(u.email || '')}</small></td>
       <td>${fmtDateTime(u.created_at)}</td>
       <td>${fmtDateTime(u.last_sign_in_at)}</td>
-      <td><span class="admin-status-badge ${u.subscription?.status || 'cancelled'}">${subscriptionLabel(u.subscription?.status)}</span></td>
+      <td><strong>${esc(adminPlanName(u.subscription))}</strong><small><span class="admin-status-badge ${u.subscription?.status || 'cancelled'}">${subscriptionLabel(u.subscription?.status)}</span></small></td>
       <td><span class="admin-status-badge ${banned?'banned':'active'}">${banned?'Bloqueado':'Ativo'}</span>${u.force_password_change?'<small>Troca de senha pendente</small>':''}</td>
       ${actions?`<td><button class="mini-btn" data-manage-user="${u.id}">Gerenciar</button></td>`:''}
     </tr>`;
@@ -179,9 +191,9 @@ function renderSubscriptions() {
   if (!subs.length) {
     $('adminSubscriptionList').innerHTML = '<div class="admin-empty">Nenhuma assinatura cadastrada.</div>';
   } else {
-    $('adminSubscriptionList').innerHTML = `<table class="admin-table"><thead><tr><th>Cliente</th><th>Status</th><th>Provedor</th><th>Último pagamento</th><th>Próxima cobrança</th></tr></thead><tbody>${subs.map(sub => {
+    $('adminSubscriptionList').innerHTML = `<table class="admin-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Status</th><th>Provedor</th><th>Último pagamento</th><th>Próxima cobrança</th></tr></thead><tbody>${subs.map(sub => {
       const u=(adminState.data.users||[]).find(x=>x.id===sub.user_id);
-      return `<tr><td><strong>${esc(userName(u))}</strong><small>${esc(u?.email||'')}</small></td><td><span class="admin-status-badge ${sub.status}">${subscriptionLabel(sub.status)}</span></td><td>${esc(String(sub.provider||'—').toUpperCase())}</td><td>${fmtDateTime(sub.last_payment_at)}</td><td>${fmtDate(sub.next_billing_at)}</td></tr>`;
+      return `<tr><td><strong>${esc(userName(u))}</strong><small>${esc(u?.email||'')}</small></td><td><strong>${esc(adminPlanName(sub))}</strong></td><td><span class="admin-status-badge ${sub.status}">${subscriptionLabel(sub.status)}</span></td><td>${esc(String(sub.provider||'—').toUpperCase())}</td><td>${fmtDateTime(sub.last_payment_at)}</td><td>${fmtDate(sub.next_billing_at)}</td></tr>`;
     }).join('')}</tbody></table>`;
   }
 
@@ -237,6 +249,35 @@ function renderSupport() {
     </div>`).join('');
 }
 
+
+function benefitStatusLabel(status) {
+  return {pending:'Em análise',approved:'Aprovado',rejected:'Recusado',cancelled:'Cancelado'}[status] || status || '—';
+}
+
+function renderBenefits() {
+  const rows=adminState.data.support_benefits || [];
+  if(!rows.length){$('adminBenefitsList').innerHTML='<div class="admin-empty">Nenhuma solicitação do NEXO Apoio.</div>';return;}
+  const canReview=['owner','admin'].includes(adminState.profile?.role);
+  $('adminBenefitsList').innerHTML=rows.map(r=>{
+    const u=(adminState.data.users||[]).find(x=>x.id===r.user_id);
+    return `<div class="admin-row-card support-benefit-row">
+      <div class="admin-row-card-main">
+        <strong>${esc(userName(u))}</strong>
+        <small>${esc(u?.email||'')} · desligamento ${fmtDate(r.unemployment_date)} · solicitado ${fmtDateTime(r.created_at)}</small>
+        ${r.customer_message?`<div class="admin-note">${esc(r.customer_message)}</div>`:''}
+        ${r.status==='approved'?`<small>Extensão: ${fmtDate(r.extension_start)} até ${fmtDate(r.extension_end)}</small>`:''}
+        ${r.decision_note?`<small>Observação: ${esc(r.decision_note)}</small>`:''}
+      </div>
+      <div class="admin-row-actions">
+        <span class="admin-status-badge ${r.status==='approved'?'active':r.status==='pending'?'in_progress':'cancelled'}">${benefitStatusLabel(r.status)}</span>
+        ${canReview&&r.status==='pending'&&r.document_path?`<button class="mini-btn" data-benefit-doc="${r.id}">Ver comprovante</button>`:''}
+        ${canReview&&r.status==='pending'?`<button class="mini-btn success" data-benefit-approve="${r.id}">Aprovar +30 dias</button><button class="mini-btn danger" data-benefit-reject="${r.id}">Recusar</button>`:''}
+        <button class="mini-btn" data-manage-user="${r.user_id}">Gerenciar usuário</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderAudit() {
   const rows = adminState.data.audit || [];
   if (!rows.length) {
@@ -256,7 +297,7 @@ function switchAdminView(view) {
   document.querySelectorAll('.admin-nav-item').forEach(b => b.classList.toggle('active', b.dataset.adminView === view));
   document.querySelectorAll('.admin-view').forEach(v => v.classList.remove('active'));
   $(view+'AdminView').classList.add('active');
-  const titles = { overview:'Visão geral', users:'Usuários', activations:'Assinaturas', support:'Suporte', audit:'Auditoria' };
+  const titles = { overview:'Visão geral', users:'Usuários', activations:'Assinaturas', support:'Suporte', benefits:'NEXO Apoio', audit:'Auditoria' };
   $('adminViewTitle').textContent = titles[view] || 'Administração';
 }
 
@@ -270,13 +311,14 @@ function openUserModal(userId) {
   $('adminManagedName').textContent = userName(u);
   $('adminManagedEmail').textContent = u.email || '—';
   $('adminManagedMeta').textContent = `${roleLabel(u.role)} · cadastro ${fmtDateTime(u.created_at)} · último acesso ${fmtDateTime(u.last_sign_in_at)}`;
+  $('adminManagedProtection').textContent = `${u.cpf_last4 ? 'CPF final '+u.cpf_last4 : 'CPF legado/não vinculado'} · Modo Proteção ${u.protection_mode?'ativo':'desativado'}`;
   $('adminManagedStatus').textContent = isBanned(u) ? 'Bloqueado' : 'Ativo';
   $('adminManagedStatus').className = `admin-status-badge ${isBanned(u)?'banned':'active'}`;
   $('adminNewEmail').value = u.email || '';
   $('temporaryPasswordBox').classList.add('hidden');
 
   const sub = u.subscription;
-  $('adminManagedSubscriptionInfo').textContent = sub ? `${subscriptionLabel(sub.status)} · início ${fmtDate(sub.started_at)} · próxima cobrança ${fmtDate(sub.next_billing_at)}` : 'Sem assinatura cadastrada.';
+  $('adminManagedSubscriptionInfo').textContent = sub ? `${adminPlanName(sub)} · ${subscriptionLabel(sub.status)} · teste até ${fmtDate(sub.trial_ends_at)} · carência até ${fmtDate(sub.grace_ends_at)}${sub.support_extension_ends_at?' · Apoio até '+fmtDate(sub.support_extension_ends_at):''} · próxima cobrança ${fmtDate(sub.next_billing_at)}` : 'Sem assinatura cadastrada.';
   $('adminSubscriptionStatus').value = sub?.status || 'active';
   $('updateSubscriptionStatusBtn').disabled = !sub;
 
@@ -300,7 +342,26 @@ function wireAdminEvents() {
 
   document.body.addEventListener('click', async e => {
     const manage = e.target.closest('[data-manage-user]');
+
     if (manage) return openUserModal(manage.dataset.manageUser);
+    const benefitDoc=e.target.closest('[data-benefit-doc]');
+    if(benefitDoc){
+      try{const data=await invokeAdmin('get_support_benefit_document_url',{request_id:benefitDoc.dataset.benefitDoc});window.open(data.url,'_blank','noopener');}
+      catch(err){alert('Não foi possível abrir o comprovante: '+err.message);} return;
+    }
+    const approveBenefit=e.target.closest('[data-benefit-approve]');
+    if(approveBenefit){
+      if(!confirm('Confirmou o desligamento na CTPS Digital? O NEXO concederá +30 dias e apagará o comprovante.'))return;
+      const note=prompt('Observação da análise (opcional):')||'';
+      try{const data=await invokeAdmin('approve_support_benefit',{request_id:approveBenefit.dataset.benefitApprove,note});alert(`NEXO Apoio aprovado: ${fmtDate(data.extension_start)} até ${fmtDate(data.extension_end)}.`);await loadAdminDashboard();}
+      catch(err){alert('Erro: '+err.message);} return;
+    }
+    const rejectBenefit=e.target.closest('[data-benefit-reject]');
+    if(rejectBenefit){
+      const note=prompt('Informe brevemente o motivo da recusa:'); if(note===null)return;
+      try{await invokeAdmin('reject_support_benefit',{request_id:rejectBenefit.dataset.benefitReject,note});await loadAdminDashboard();}
+      catch(err){alert('Erro: '+err.message);} return;
+    }
     const progress = e.target.closest('[data-ticket-progress]');
     if (progress) {
       try { await invokeAdmin('update_ticket', { ticket_id:progress.dataset.ticketProgress, status:'in_progress' }); await loadAdminDashboard(); }

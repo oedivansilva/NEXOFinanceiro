@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7.0">
-  <link rel="stylesheet" href="admin.css?v=7.0">
+  <link rel="stylesheet" href="style.css?v=9.0">
+  <link rel="stylesheet" href="admin.css?v=9.0">
 </head>
 <body class="admin-page">
   <header class="nexo-topbar app-global-topbar admin-global-topbar">
@@ -45,6 +45,7 @@
           <button class="admin-nav-item" data-admin-view="users"><span>♙</span> Usuários</button>
           <button class="admin-nav-item" data-admin-view="activations"><span>◆</span> Assinaturas</button>
           <button class="admin-nav-item" data-admin-view="support"><span>◌</span> Suporte</button>
+          <button class="admin-nav-item" data-admin-view="benefits"><span>🧡</span> NEXO Apoio <b id="supportBenefitNavCount" class="admin-nav-count hidden">0</b></button>
           <button class="admin-nav-item" data-admin-view="audit"><span>≡</span> Auditoria</button>
         </nav>
       </div>
@@ -69,6 +70,7 @@
           <article class="admin-summary-card"><span>Assinaturas ativas</span><strong id="adminActiveSubsCount">0</strong><small>Clientes liberados</small></article>
           <article class="admin-summary-card"><span>Receita recorrente</span><strong id="adminMrr">R$ 0,00</strong><small>MRR estimado</small></article>
           <article class="admin-summary-card"><span>Chamados abertos</span><strong id="adminOpenTicketsCount">0</strong><small>Suporte pendente</small></article>
+          <article class="admin-summary-card support-highlight"><span>NEXO Apoio pendente</span><strong id="adminPendingBenefitsCount">0</strong><small>Solicitações Plus/Pro aguardando análise</small></article>
         </div>
 
         <div class="admin-two-col">
@@ -135,6 +137,17 @@
         </article>
       </section>
 
+      <section id="benefitsAdminView" class="admin-view">
+        <article class="admin-panel">
+          <div class="admin-panel-head"><div><p class="eyebrow">🧡 NEXO APOIO</p><h2>Solicitações por desemprego</h2></div></div>
+          <div class="admin-benefit-info">
+            <strong>Política atual</strong>
+            <span>+30 dias gratuitos, uma concessão a cada 12 meses. O comprovante é removido após a decisão administrativa.</span>
+          </div>
+          <div id="adminBenefitsList" class="admin-stack"></div>
+        </article>
+      </section>
+
       <section id="auditAdminView" class="admin-view">
         <article class="admin-panel">
           <div class="admin-panel-head"><div><p class="eyebrow">SEGURANÇA</p><h2>Auditoria administrativa</h2></div></div>
@@ -153,7 +166,7 @@
       <input id="adminManagedUserId" type="hidden">
       <div class="admin-user-profile-card">
         <div class="admin-avatar" id="adminManagedAvatar">U</div>
-        <div><strong id="adminManagedName">—</strong><span id="adminManagedEmail">—</span><small id="adminManagedMeta">—</small></div>
+        <div><strong id="adminManagedName">—</strong><span id="adminManagedEmail">—</span><small id="adminManagedMeta">—</small><small id="adminManagedProtection">—</small></div>
         <span id="adminManagedStatus" class="admin-status-badge">Ativo</span>
       </div>
 
@@ -184,6 +197,7 @@
             <option value="trialing">Teste</option>
             <option value="past_due">Pagamento pendente</option>
             <option value="grace">Carência</option>
+            <option value="support" disabled>NEXO Apoio (via benefício)</option>
             <option value="suspended">Suspensa</option>
             <option value="cancelled">Cancelada</option>
           </select>
@@ -200,7 +214,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=7.0"></script>
-  <script src="admin.js?v=7.0"></script>
+  <script src="supabase-config.js?v=9.0"></script>
+  <script src="admin.js?v=9.0"></script>
 </body>
 </html>
