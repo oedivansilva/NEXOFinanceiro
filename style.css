@@ -405,3 +405,55 @@ body.theme-pro .access-status-banner{background:#1A1916;border-color:#4B4128;col
 
 @media(max-width:1050px){.plan-options-grid{grid-template-columns:1fr}.plan-choice-card{min-height:auto}.plan-choice-card>p{min-height:auto}}
 @media(max-width:760px){.plan-theme-badge{min-width:auto;padding:0 8px;font-size:8px}.trial-plan-message{align-items:flex-start;flex-direction:column}.plans-intro-panel{padding:16px}body.theme-pro .nav-item.active{box-shadow:inset 0 -3px 0 #D6B25E}.subscription-account-grid{grid-template-columns:1fr}}
+
+
+/* =========================================================
+   NEXO FINANCEIRO — V9.1
+   CONTRASTE CORRIGIDO NO TEMA PRO (BLACK + GOLD)
+   ========================================================= */
+
+/* Os valores dos cards herdavam a cor escura do tema claro.
+   No Black + Gold, números principais precisam de alto contraste. */
+body.theme-pro .summary-card strong{
+  color:#F7F8FA;
+  text-shadow:0 1px 0 rgba(255,255,255,.02);
+}
+
+body.theme-pro .summary-card.highlight strong{
+  color:#F0D58A;
+}
+
+/* Títulos e números secundários dentro das superfícies escuras */
+body.theme-pro .panel h2,
+body.theme-pro .entity-card h3,
+body.theme-pro .metric-line strong,
+body.theme-pro .trial-value-metrics strong,
+body.theme-pro .protection-metrics strong{
+  color:#F2F3F5;
+}
+
+/* Valores financeiros mantêm cor sem perder contraste */
+body.theme-pro .amount-income{
+  color:#5ED49A;
+}
+
+body.theme-pro .amount-expense{
+  color:#FF786F;
+}
+
+/* Texto dos cards um pouco mais legível no fundo escuro */
+body.theme-pro .summary-card span{
+  color:#B4B8C0;
+}
+
+body.theme-pro .summary-card small{
+  color:#949AA5;
+}
+
+body.theme-pro .summary-card.highlight span{
+  color:#D0C9B8;
+}
+
+body.theme-pro .summary-card.highlight small{
+  color:#AAA392;
+}
