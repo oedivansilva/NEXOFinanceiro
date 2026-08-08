@@ -312,3 +312,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--orange);
   .subscription-steps{grid-template-columns:1fr}
 }
 @media(max-width:520px){.subscription-features{grid-template-columns:1fr}.subscription-actions{display:grid}.subscription-actions .btn{width:100%}}
+
+
+/* NEXO V6 — suporte / administração */
+.auth-forgot-btn{display:block;margin:11px auto 0;font-size:12px}.support-access-copy{font-size:12px;line-height:1.55;margin:0 0 8px}.support-honeypot{position:absolute!important;left:-9999px!important;opacity:0!important;pointer-events:none!important}.modal-card textarea{width:100%;resize:vertical;min-height:90px;border:1px solid #dfe2e7;border-radius:12px;padding:11px 12px;font:500 13px Poppins,sans-serif;outline:none}.modal-card textarea:focus{border-color:#f1a08e;box-shadow:0 0 0 3px rgba(238,77,45,.08)}

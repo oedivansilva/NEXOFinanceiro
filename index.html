@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4.1">
+  <link rel="stylesheet" href="style.css?v=6.0">
 </head>
 <body class="auth-page">
   <header class="nexo-topbar auth-topbar">
@@ -55,6 +55,7 @@
             <input id="loginPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="••••••••">
           </label>
           <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+          <button id="forgotPasswordBtn" class="text-button auth-forgot-btn" type="button">Esqueci minha senha</button>
         </form>
 
         <form id="signupForm" class="auth-form">
@@ -75,8 +76,31 @@
     </div>
   </main>
 
+
+  <dialog id="supportAccessModal" class="modal">
+    <form id="supportAccessForm" class="modal-card" method="dialog">
+      <div class="modal-head">
+        <div><p class="eyebrow">SUPORTE NEXO</p><h2>Recuperar acesso</h2></div>
+        <button id="closeSupportAccessModal" type="button" class="icon-btn">×</button>
+      </div>
+      <p class="muted support-access-copy">Informe o e-mail cadastrado. A solicitação irá para o painel de suporte do NEXO para que seu acesso seja redefinido.</p>
+      <label>Nome
+        <input id="supportName" type="text" placeholder="Seu nome">
+      </label>
+      <label>E-mail cadastrado
+        <input id="supportEmail" type="email" required placeholder="voce@email.com">
+      </label>
+      <label>O que aconteceu?
+        <textarea id="supportMessage" rows="3" placeholder="Ex.: Esqueci minha senha e não consigo entrar."></textarea>
+      </label>
+      <input id="supportWebsite" class="support-honeypot" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button id="sendSupportRequestBtn" class="btn btn-primary btn-block" type="submit">Enviar solicitação</button>
+      <p id="supportRequestMessage" class="form-message"></p>
+    </form>
+  </dialog>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=4.1"></script>
-  <script src="auth.js?v=4.1"></script>
+  <script src="supabase-config.js?v=6.0"></script>
+  <script src="auth.js?v=6.0"></script>
 </body>
 </html>

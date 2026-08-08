@@ -160,6 +160,13 @@ async function init() {
 
   // Carrega os dados UMA vez e já libera a interface.
   await loadData();
+
+  // Senhas temporárias geradas pelo suporte exigem troca no próximo acesso.
+  if (state.profile?.force_password_change) {
+    window.location.href = 'change-password.html';
+    return;
+  }
+
   const defaultsCreated = await ensureDefaults();
   if (defaultsCreated) await loadData();
   renderAll();
@@ -510,6 +517,8 @@ function renderAll() {
 function renderUser() {
   const name = state.profile?.full_name || state.user?.user_metadata?.full_name || state.user?.email || 'Usuário';
   $('userMini').textContent = name;
+  const adminBtn = $('adminPanelBtn');
+  if (adminBtn) adminBtn.classList.toggle('hidden', !['owner','admin','support'].includes(state.profile?.role));
 }
 
 function fillSelects() {

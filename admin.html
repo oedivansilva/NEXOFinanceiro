@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#EE4D2D">
+  <title>NEXO Financeiro — Administração</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=6.0">
+  <link rel="stylesheet" href="admin.css?v=6.0">
+</head>
+<body class="admin-page">
+  <header class="nexo-topbar app-global-topbar admin-global-topbar">
+    <div class="nexo-brand">
+      <span class="brand-mark small" aria-hidden="true">N</span>
+      <span class="brand-copy"><strong>NEXO</strong><small>Administração</small></span>
+    </div>
+    <div class="admin-top-actions">
+      <a class="btn btn-light" href="app.html">← Voltar ao Financeiro</a>
+      <button id="adminLogoutBtn" class="btn btn-light">Sair</button>
+    </div>
+  </header>
+
+  <div id="bootstrapScreen" class="bootstrap-screen hidden">
+    <article class="bootstrap-card">
+      <div class="bootstrap-shield">🛡️</div>
+      <p class="eyebrow">CONFIGURAÇÃO INICIAL</p>
+      <h1>Ativar Painel Administrativo</h1>
+      <p>Esta conta ainda não possui acesso administrativo. Se esta é a sua conta principal, você pode defini-la como proprietária do NEXO.</p>
+      <button id="claimOwnerBtn" class="btn btn-primary">Ativar esta conta como proprietária</button>
+      <small>Essa opção só funciona uma vez, enquanto ainda não existir proprietário ou administrador cadastrado.</small>
+      <p id="bootstrapMessage" class="form-message"></p>
+    </article>
+  </div>
+
+  <div id="adminApp" class="admin-layout hidden">
+    <aside class="admin-sidebar">
+      <div>
+        <p class="admin-sidebar-title">OPERAÇÃO</p>
+        <nav class="admin-nav">
+          <button class="admin-nav-item active" data-admin-view="overview"><span>▦</span> Visão geral</button>
+          <button class="admin-nav-item" data-admin-view="users"><span>♙</span> Usuários</button>
+          <button class="admin-nav-item" data-admin-view="activations"><span>◆</span> Assinaturas</button>
+          <button class="admin-nav-item" data-admin-view="support"><span>◌</span> Suporte</button>
+          <button class="admin-nav-item" data-admin-view="audit"><span>≡</span> Auditoria</button>
+        </nav>
+      </div>
+      <div class="admin-sidebar-foot">
+        <strong id="adminIdentity">Carregando...</strong>
+        <small id="adminRoleLabel">Administrador</small>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-page-head">
+        <div>
+          <p class="eyebrow">NEXO FINANCEIRO · OPERAÇÃO</p>
+          <h1 id="adminViewTitle">Visão geral</h1>
+        </div>
+        <button id="adminRefreshBtn" class="btn btn-light">↻ Atualizar</button>
+      </header>
+
+      <section id="overviewAdminView" class="admin-view active">
+        <div class="admin-summary-grid">
+          <article class="admin-summary-card"><span>Usuários cadastrados</span><strong id="adminUsersCount">0</strong><small>Total no Supabase Auth</small></article>
+          <article class="admin-summary-card"><span>Assinaturas ativas</span><strong id="adminActiveSubsCount">0</strong><small>Clientes liberados</small></article>
+          <article class="admin-summary-card warning"><span>Aguardando ativação</span><strong id="adminPendingActivationsCount">0</strong><small>Solicitações pendentes</small></article>
+          <article class="admin-summary-card"><span>Chamados abertos</span><strong id="adminOpenTicketsCount">0</strong><small>Suporte pendente</small></article>
+        </div>
+
+        <div class="admin-two-col">
+          <article class="admin-panel">
+            <div class="admin-panel-head"><div><p class="eyebrow">ASSINATURAS</p><h2>Ativações pendentes</h2></div><button class="text-button" data-admin-jump="activations">Ver todas</button></div>
+            <div id="overviewActivations" class="admin-stack"></div>
+          </article>
+          <article class="admin-panel">
+            <div class="admin-panel-head"><div><p class="eyebrow">SUPORTE</p><h2>Chamados recentes</h2></div><button class="text-button" data-admin-jump="support">Ver todos</button></div>
+            <div id="overviewTickets" class="admin-stack"></div>
+          </article>
+        </div>
+
+        <article class="admin-panel">
+          <div class="admin-panel-head"><div><p class="eyebrow">USUÁRIOS</p><h2>Cadastros recentes</h2></div><button class="text-button" data-admin-jump="users">Gerenciar usuários</button></div>
+          <div id="overviewUsers" class="admin-table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="usersAdminView" class="admin-view">
+        <article class="admin-panel">
+          <div class="admin-panel-head wrap">
+            <div><p class="eyebrow">CONTAS</p><h2>Usuários</h2></div>
+            <input id="adminUserSearch" class="admin-search" type="search" placeholder="Buscar por nome ou e-mail...">
+          </div>
+          <div id="adminUsersTable" class="admin-table-wrap"></div>
+        </article>
+      </section>
+
+      <section id="activationsAdminView" class="admin-view">
+        <article class="admin-panel">
+          <div class="admin-panel-head"><div><p class="eyebrow">INFINITEPAY</p><h2>Solicitações de ativação</h2></div><a id="adminInfinitePayLink" class="btn btn-light" href="https://invoice.infinitepay.io/plans/oedivansilva/TBs7gYJ62L" target="_blank" rel="noopener noreferrer">Abrir InfinitePay ↗</a></div>
+          <div id="adminActivationList" class="admin-stack"></div>
+        </article>
+      </section>
+
+      <section id="supportAdminView" class="admin-view">
+        <article class="admin-panel">
+          <div class="admin-panel-head"><div><p class="eyebrow">ATENDIMENTO</p><h2>Solicitações de suporte</h2></div></div>
+          <div id="adminSupportList" class="admin-stack"></div>
+        </article>
+      </section>
+
+      <section id="auditAdminView" class="admin-view">
+        <article class="admin-panel">
+          <div class="admin-panel-head"><div><p class="eyebrow">SEGURANÇA</p><h2>Auditoria administrativa</h2></div></div>
+          <div id="adminAuditTable" class="admin-table-wrap"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="adminUserModal" class="modal admin-user-modal">
+    <form method="dialog" class="modal-card wide">
+      <div class="modal-head">
+        <div><p class="eyebrow">GERENCIAR USUÁRIO</p><h2 id="adminUserModalTitle">Usuário</h2></div>
+        <button type="button" class="icon-btn" data-admin-close="adminUserModal">×</button>
+      </div>
+      <input id="adminManagedUserId" type="hidden">
+      <div class="admin-user-profile-card">
+        <div class="admin-avatar" id="adminManagedAvatar">U</div>
+        <div><strong id="adminManagedName">—</strong><span id="adminManagedEmail">—</span><small id="adminManagedMeta">—</small></div>
+        <span id="adminManagedStatus" class="admin-status-badge">Ativo</span>
+      </div>
+
+      <div class="admin-action-grid">
+        <section class="admin-action-box">
+          <h3>Acesso</h3>
+          <p>Gere uma senha temporária para recuperação de acesso.</p>
+          <button id="generateTempPasswordBtn" type="button" class="btn btn-primary">Gerar senha temporária</button>
+          <div id="temporaryPasswordBox" class="temporary-password-box hidden">
+            <span>Senha temporária</span>
+            <strong id="temporaryPasswordValue">—</strong>
+            <button id="copyTemporaryPasswordBtn" type="button" class="mini-btn">Copiar</button>
+          </div>
+        </section>
+
+        <section class="admin-action-box">
+          <h3>E-mail</h3>
+          <p>Corrija o endereço cadastrado sem confirmação por e-mail.</p>
+          <input id="adminNewEmail" type="email" placeholder="novo@email.com">
+          <button id="updateAdminEmailBtn" type="button" class="btn btn-light">Alterar e-mail</button>
+        </section>
+
+        <section class="admin-action-box">
+          <h3>Assinatura</h3>
+          <p id="adminManagedSubscriptionInfo">Sem assinatura cadastrada.</p>
+          <select id="adminSubscriptionStatus">
+            <option value="active">Ativa</option>
+            <option value="trialing">Teste</option>
+            <option value="past_due">Pagamento pendente</option>
+            <option value="grace">Carência</option>
+            <option value="suspended">Suspensa</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+          <button id="updateSubscriptionStatusBtn" type="button" class="btn btn-light">Atualizar status</button>
+        </section>
+
+        <section class="admin-action-box danger-box">
+          <h3>Segurança</h3>
+          <p>Bloqueie ou libere o acesso do usuário ao NEXO.</p>
+          <button id="toggleUserBanBtn" type="button" class="btn btn-danger">Bloquear usuário</button>
+        </section>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js?v=6.0"></script>
+  <script src="admin.js?v=6.0"></script>
+</body>
+</html>
