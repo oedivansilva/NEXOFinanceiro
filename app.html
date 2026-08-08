@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=4.0" />
+  <link rel="stylesheet" href="style.css?v=5.0" />
 </head>
 <body>
   <header class="nexo-topbar app-global-topbar">
@@ -31,6 +31,7 @@
         <button class="nav-item" data-view="planning">▦ <span>Planejamento</span></button>
         <button class="nav-item" data-view="cards">▣ <span>Cartões</span></button>
         <button class="nav-item" data-view="accounts">◉ <span>Contas</span></button>
+        <button class="nav-item" data-view="subscription">◆ <span>Assinatura</span></button>
         <button class="nav-item" data-view="settings">⚙ <span>Cadastros</span></button>
       </nav>
 
@@ -109,6 +110,64 @@
       <section id="accountsView" class="view">
         <div class="section-action"><button id="newAccountBtn" class="btn btn-primary">＋ Nova conta</button></div>
         <div id="accountsGrid" class="cards-grid"></div>
+      </section>
+
+
+      <section id="subscriptionView" class="view">
+        <div class="subscription-grid">
+          <article class="subscription-plan-card">
+            <div class="subscription-plan-top">
+              <div>
+                <p class="eyebrow">PLANO NEXO</p>
+                <h2 id="subscriptionPlanName">NEXO Financeiro Pessoal</h2>
+                <p id="subscriptionPlanDescription" class="subscription-description">Controle de contas, cartões, faturas e planejamento financeiro em um único lugar.</p>
+              </div>
+              <span id="subscriptionStatusBadge" class="subscription-status subscription-status-none">Não assinante</span>
+            </div>
+
+            <div class="subscription-provider">
+              <div class="provider-mark">∞</div>
+              <div>
+                <strong>Cobrança pela InfinitePay</strong>
+                <small>O pagamento e a recorrência são processados na plataforma da InfinitePay.</small>
+              </div>
+            </div>
+
+            <div class="subscription-features">
+              <div><span>✓</span><strong>Contas e saldos</strong></div>
+              <div><span>✓</span><strong>Cartões e faturas</strong></div>
+              <div><span>✓</span><strong>Planejamento mensal</strong></div>
+              <div><span>✓</span><strong>Histórico financeiro</strong></div>
+            </div>
+
+            <div class="subscription-actions">
+              <a id="subscribePlanBtn" class="btn btn-primary" href="https://invoice.infinitepay.io/plans/oedivansilva/TBs7gYJ62L" target="_blank" rel="noopener noreferrer">Assinar pela InfinitePay ↗</a>
+              <button id="requestActivationBtn" type="button" class="btn btn-secondary">Já assinei · solicitar ativação</button>
+            </div>
+            <p id="subscriptionActionHelp" class="subscription-help">Depois de concluir a assinatura na InfinitePay, volte aqui e solicite a ativação. Nesta primeira versão, a validação será feita pelo suporte NEXO.</p>
+          </article>
+
+          <article class="panel subscription-details-card">
+            <div class="panel-head"><div><p class="eyebrow">MINHA CONTA</p><h2>Minha assinatura</h2></div></div>
+            <div class="subscription-detail-list">
+              <div><span>Plano</span><strong id="subscriptionDetailPlan">NEXO Financeiro Pessoal</strong></div>
+              <div><span>Status</span><strong id="subscriptionDetailStatus">Carregando...</strong></div>
+              <div><span>Início</span><strong id="subscriptionDetailStarted">—</strong></div>
+              <div><span>Próxima cobrança</span><strong id="subscriptionDetailNextBilling">—</strong></div>
+              <div><span>Última validação</span><strong id="subscriptionDetailVerified">—</strong></div>
+            </div>
+            <div id="subscriptionRequestBox" class="subscription-request-box hidden"></div>
+          </article>
+        </div>
+
+        <article class="panel subscription-how">
+          <div class="panel-head"><div><p class="eyebrow">COMO FUNCIONA</p><h2>Assinatura e liberação do NEXO</h2></div></div>
+          <div class="subscription-steps">
+            <div><span>1</span><div><strong>Assine</strong><small>O pagamento acontece no ambiente seguro da InfinitePay.</small></div></div>
+            <div><span>2</span><div><strong>Solicite a ativação</strong><small>Depois do pagamento, informe ao NEXO que a assinatura foi concluída.</small></div></div>
+            <div><span>3</span><div><strong>Suporte valida</strong><small>O painel administrativo confirmará o pagamento e ativará o plano.</small></div></div>
+          </div>
+        </article>
       </section>
 
       <section id="settingsView" class="view">
@@ -303,6 +362,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js?v=3.0"></script>
-  <script src="app.js?v=4.0"></script>
+  <script src="app.js?v=5.0"></script>
 </body>
 </html>

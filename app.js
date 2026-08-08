@@ -10,6 +10,10 @@ const state = {
   transactions: [],
   invoices: [],
   invoicePayments: [],
+  plan: null,
+  subscription: null,
+  subscriptionRequest: null,
+  billingLoaded: false,
   selectedMonth: '',
   transactionType: 'expense'
 };
@@ -31,6 +35,16 @@ const parseMoney = (value) => {
 const escapeHtml = (s='') => String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));
 const fmtDate = (date) => date ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 const uid = () => state.user?.id;
+
+const INFINITEPAY_PLAN_URL = 'https://invoice.infinitepay.io/plans/oedivansilva/TBs7gYJ62L';
+const DEFAULT_PLAN = {
+  code: 'nexo-pessoal',
+  name: 'NEXO Financeiro Pessoal',
+  description: 'Controle de contas, cartões, faturas e planejamento financeiro em um único lugar.',
+  provider: 'infinitepay',
+  provider_plan_url: INFINITEPAY_PLAN_URL,
+  provider_plan_ref: 'TBs7gYJ62L'
+};
 
 const monthLabel = (month) => {
   if (!month) return '—';
@@ -150,6 +164,9 @@ async function init() {
   if (defaultsCreated) await loadData();
   renderAll();
 
+  // Assinatura carrega separadamente para não deixar a abertura do financeiro mais lenta.
+  loadBillingData();
+
   // A sincronização das faturas roda em segundo plano.
   // Assim ela não segura a abertura do sistema.
   setTimeout(async () => {
@@ -188,6 +205,141 @@ async function loadData() {
   state.transactions = transactions.data || [];
   state.invoices = invoices.data || [];
   state.invoicePayments = invoicePayments.data || [];
+}
+
+
+async function loadBillingData() {
+  state.billingLoaded = false;
+  renderSubscription();
+
+  try {
+    const [planRes, subscriptionRes, requestRes] = await Promise.all([
+      sb.from('plans').select('*').eq('code', 'nexo-pessoal').eq('active', true).maybeSingle(),
+      sb.from('subscriptions').select('*').eq('user_id', uid()).maybeSingle(),
+      sb.from('subscription_activation_requests').select('*').eq('user_id', uid()).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    ]);
+
+    if (planRes.error) console.warn('Planos ainda não disponíveis:', planRes.error.message);
+    if (subscriptionRes.error) console.warn('Assinatura ainda não disponível:', subscriptionRes.error.message);
+    if (requestRes.error) console.warn('Solicitações de assinatura ainda não disponíveis:', requestRes.error.message);
+
+    state.plan = planRes.data || DEFAULT_PLAN;
+    state.subscription = subscriptionRes.data || null;
+    state.subscriptionRequest = requestRes.data || null;
+  } catch (error) {
+    console.warn('Não foi possível carregar a assinatura:', error);
+    state.plan = DEFAULT_PLAN;
+    state.subscription = null;
+    state.subscriptionRequest = null;
+  } finally {
+    state.billingLoaded = true;
+    renderSubscription();
+  }
+}
+
+function subscriptionStatusKey() {
+  return state.subscription?.status || 'none';
+}
+
+function subscriptionStatusLabel(status = subscriptionStatusKey()) {
+  return {
+    active: 'Ativa',
+    trialing: 'Período de teste',
+    past_due: 'Pagamento pendente',
+    grace: 'Em carência',
+    suspended: 'Suspensa',
+    cancelled: 'Cancelada',
+    none: 'Não assinante'
+  }[status] || 'Não assinante';
+}
+
+function requestStatusLabel(status) {
+  return {
+    pending: 'Aguardando validação',
+    approved: 'Aprovada',
+    rejected: 'Não aprovada',
+    cancelled: 'Cancelada'
+  }[status] || status || '—';
+}
+
+function renderSubscription() {
+  if (!$('subscriptionPlanName')) return;
+
+  const plan = state.plan || DEFAULT_PLAN;
+  const subscription = state.subscription;
+  const request = state.subscriptionRequest;
+  const status = subscriptionStatusKey();
+  const active = status === 'active' || status === 'trialing' || status === 'grace';
+  const pendingRequest = request?.status === 'pending';
+
+  $('subscriptionPlanName').textContent = plan.name || DEFAULT_PLAN.name;
+  $('subscriptionPlanDescription').textContent = plan.description || DEFAULT_PLAN.description;
+  $('subscriptionDetailPlan').textContent = plan.name || DEFAULT_PLAN.name;
+
+  const badge = $('subscriptionStatusBadge');
+  badge.className = `subscription-status subscription-status-${status}`;
+  badge.textContent = state.billingLoaded ? subscriptionStatusLabel(status) : 'Carregando...';
+
+  $('subscriptionDetailStatus').textContent = state.billingLoaded ? subscriptionStatusLabel(status) : 'Carregando...';
+  $('subscriptionDetailStarted').textContent = subscription?.started_at ? fmtDate(String(subscription.started_at).slice(0,10)) : '—';
+  $('subscriptionDetailNextBilling').textContent = subscription?.next_billing_at ? fmtDate(String(subscription.next_billing_at).slice(0,10)) : '—';
+  $('subscriptionDetailVerified').textContent = subscription?.last_verified_at ? new Date(subscription.last_verified_at).toLocaleString('pt-BR') : '—';
+
+  const subscribeBtn = $('subscribePlanBtn');
+  subscribeBtn.href = plan.provider_plan_url || INFINITEPAY_PLAN_URL;
+  subscribeBtn.textContent = active ? 'Abrir plano na InfinitePay ↗' : 'Assinar pela InfinitePay ↗';
+
+  const requestBtn = $('requestActivationBtn');
+  requestBtn.disabled = !state.billingLoaded || active || pendingRequest || !plan.id;
+  requestBtn.classList.toggle('hidden', active);
+  requestBtn.textContent = pendingRequest ? 'Ativação solicitada ✓' : 'Já assinei · solicitar ativação';
+
+  const help = $('subscriptionActionHelp');
+  if (!state.billingLoaded) {
+    help.textContent = 'Carregando informações da assinatura...';
+  } else if (active) {
+    help.textContent = 'Sua assinatura está liberada no NEXO. A cobrança continua sendo gerenciada pela InfinitePay.';
+  } else if (pendingRequest) {
+    help.textContent = 'Recebemos sua solicitação. O suporte NEXO precisa validar o pagamento antes de ativar o plano.';
+  } else if (!plan.id) {
+    help.textContent = 'O plano já pode ser assinado na InfinitePay. Execute primeiro o SQL de assinaturas no Supabase para habilitar a solicitação de ativação.';
+  } else {
+    help.textContent = 'Depois de concluir a assinatura na InfinitePay, volte aqui e solicite a ativação. Nesta primeira versão, a validação será feita pelo suporte NEXO.';
+  }
+
+  const requestBox = $('subscriptionRequestBox');
+  if (request) {
+    requestBox.classList.remove('hidden');
+    requestBox.innerHTML = `<strong>Última solicitação</strong><span>${escapeHtml(requestStatusLabel(request.status))}</span><small>Enviada em ${new Date(request.created_at).toLocaleString('pt-BR')}</small>`;
+  } else {
+    requestBox.classList.add('hidden');
+    requestBox.innerHTML = '';
+  }
+}
+
+async function requestSubscriptionActivation() {
+  const plan = state.plan;
+  if (!state.billingLoaded) return;
+  if (!plan?.id) return alert('Execute o SQL de assinaturas no Supabase antes de solicitar a ativação.');
+  if (state.subscription?.status === 'active') return alert('Sua assinatura já está ativa.');
+  if (state.subscriptionRequest?.status === 'pending') return alert('Sua solicitação já está aguardando validação.');
+
+  const confirmed = confirm('Você já concluiu a assinatura na InfinitePay e deseja solicitar a ativação do NEXO?');
+  if (!confirmed) return;
+
+  const { error } = await sb.from('subscription_activation_requests').insert({
+    user_id: uid(),
+    plan_id: plan.id,
+    status: 'pending'
+  });
+
+  if (error) {
+    if (error.code === '23505') return alert('Já existe uma solicitação de ativação pendente para sua conta.');
+    return alert('Não foi possível solicitar a ativação: ' + error.message);
+  }
+
+  await loadBillingData();
+  alert('Solicitação enviada! O suporte NEXO poderá validar sua assinatura.');
 }
 
 async function syncCardInvoices() {
@@ -351,6 +503,7 @@ function renderAll() {
   renderPlanning();
   renderCards();
   renderAccounts();
+  renderSubscription();
   renderSettings();
 }
 
@@ -696,6 +849,7 @@ function wireEvents() {
   $('newCardBtn').addEventListener('click', ()=>openCard());
   $('newCategoryBtn').addEventListener('click', ()=>openCategory());
   $('newIncomeSourceBtn').addEventListener('click', ()=>openIncomeSource());
+  $('requestActivationBtn').addEventListener('click', requestSubscriptionActivation);
 
   document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', ()=>$(btn.dataset.close).close()));
   document.querySelectorAll('.type-option').forEach(btn=>btn.addEventListener('click',()=>setTransactionType(btn.dataset.type)));
@@ -737,8 +891,11 @@ function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $(view+'View').classList.add('active');
-  const titles={dashboard:'Visão geral',transactions:'Lançamentos',planning:'Planejamento',cards:'Cartões',accounts:'Contas',settings:'Cadastros financeiros'};
+  const titles={dashboard:'Visão geral',transactions:'Lançamentos',planning:'Planejamento',cards:'Cartões',accounts:'Contas',subscription:'Assinatura',settings:'Cadastros financeiros'};
   $('viewTitle').textContent=titles[view]||'NEXO Financeiro';
+  const billingView = view === 'subscription';
+  $('monthFilter').classList.toggle('hidden', billingView);
+  $('quickAddTop').classList.toggle('hidden', billingView);
 }
 
 function setTransactionType(type) {
