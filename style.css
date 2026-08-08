@@ -457,3 +457,15 @@ body.theme-pro .summary-card.highlight span{
 body.theme-pro .summary-card.highlight small{
   color:#AAA392;
 }
+
+/* =========================================================
+   NEXO FINANCEIRO — V9.3
+   TROCA DE PLANO: PRORRATA + DOWNGRADE AGENDADO
+   ========================================================= */
+.scheduled-plan-change-box{margin-top:14px;padding:14px 16px;border:1px solid var(--line,#e6e6e8);border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--surface-soft,#f8f8fa)}
+.scheduled-plan-change-box>div{display:flex;flex-direction:column;gap:4px}.scheduled-plan-change-box strong{font-size:13px}.scheduled-plan-change-box span{font-size:11px;line-height:1.55;color:var(--muted,#6b7280)}.scheduled-plan-change-box small{font-size:10px;color:var(--muted,#6b7280)}
+.plan-choice-card.is-scheduled{outline:2px dashed color-mix(in srgb,var(--accent,#EE4D2D) 58%,transparent)}
+.plan-change-card{max-width:620px}.plan-change-route{display:inline-flex;align-items:center;align-self:flex-start;padding:7px 11px;border-radius:999px;background:var(--surface-soft,#f4f4f6);font-weight:700;font-size:11px;margin-bottom:14px}.plan-change-description{font-size:12px;line-height:1.65;color:var(--text,#242424);margin-bottom:14px}.plan-change-values{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 14px}.plan-change-values>div{padding:15px;border:1px solid var(--line,#e5e7eb);border-radius:15px;background:var(--surface-soft,#f8f8fa);display:flex;flex-direction:column;gap:7px}.plan-change-values span{font-size:10px;color:var(--muted,#6b7280);font-weight:600}.plan-change-values strong{font-size:19px;letter-spacing:-.04em}.plan-change-note{padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--accent,#EE4D2D) 9%,transparent);font-size:10.5px;line-height:1.55;color:var(--text,#242424)}
+body.theme-pro .scheduled-plan-change-box,body.theme-pro .plan-change-values>div,body.theme-pro .plan-change-route{background:#171A20;border-color:#2A2E36;color:#F2F3F5}body.theme-pro .scheduled-plan-change-box span,body.theme-pro .scheduled-plan-change-box small,body.theme-pro .plan-change-values span{color:#A7ACB5}body.theme-pro .plan-change-description,body.theme-pro .plan-change-note{color:#E7E9ED}body.theme-pro .plan-change-values strong{color:#F0D58A}
+body.theme-plus .scheduled-plan-change-box{background:#F2FBF5;border-color:#CDEED7}
+@media(max-width:640px){.scheduled-plan-change-box{align-items:stretch;flex-direction:column}.scheduled-plan-change-box .btn{width:100%}.plan-change-values{grid-template-columns:1fr}}

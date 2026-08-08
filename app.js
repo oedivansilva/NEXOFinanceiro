@@ -20,6 +20,7 @@ const state = {
   protectionSpendResolver: null,
   billingReturnHandled: false,
   billingLoaded: false,
+  pendingPlanChange: null,
   selectedMonth: '',
   transactionType: 'expense'
 };
@@ -406,6 +407,7 @@ function renderSubscription() {
 
   const subscription = state.subscription;
   const checkout = state.checkoutSession;
+  const scheduledPlan = subscription?.scheduled_plan_id ? state.plans.find(p=>p.id===subscription.scheduled_plan_id) : null;
   const status = subscriptionStatusKey();
   const active = status === 'active';
   const current = currentPlan();
@@ -447,11 +449,15 @@ function renderSubscription() {
         (!checkout.expires_at || new Date(checkout.expires_at).getTime() > Date.now());
       let actionText = `Assinar ${labels[plan.code]} · ${money(planPrice(plan))}`;
       let actionType = 'checkout';
-      if (isCurrent) { actionText = 'Plano atual ✓'; actionType = 'current'; }
-      else if (active) { actionText = `Mudar para ${labels[plan.code]}`; actionType = 'change'; }
+      const linkedRecurrence = Boolean(subscription?.provider_subscription_ref);
+      const isScheduled = Boolean(scheduledPlan && scheduledPlan.id === plan.id && subscription?.scheduled_change_at);
+      if (isCurrent) { actionText = linkedRecurrence ? 'Plano atual ✓' : 'Plano atual no NEXO ✓'; actionType = 'current'; }
+      else if (isScheduled) { actionText = `Agendado para ${fmtDate(subscription.scheduled_change_at)}`; actionType = 'scheduled'; }
+      else if (active && linkedRecurrence) { actionText = `Mudar para ${labels[plan.code]}`; actionType = 'change'; }
+      else if (active && !linkedRecurrence) { actionText = `Assinar ${labels[plan.code]} · ${money(planPrice(plan))}`; actionType = 'change'; }
       else if (checkoutForPlan) actionText = 'Continuar pagamento';
-      const disabled = !state.billingLoaded || isCurrent;
-      return `<article class="plan-choice-card plan-choice-${tone[plan.code]} ${isCurrent?'is-current':''} ${isTrialPlan?'is-trial':''}">
+      const disabled = !state.billingLoaded || isCurrent || isScheduled;
+      return `<article class="plan-choice-card plan-choice-${tone[plan.code]} ${isCurrent?'is-current':''} ${isTrialPlan?'is-trial':''} ${isScheduled?'is-scheduled':''}">
         <div class="plan-choice-head">
           <div><span class="plan-choice-kicker">${labels[plan.code]}</span><h3>${escapeHtml(plan.name)}</h3></div>
           ${plan.code==='nexo-plus'?'<span class="plan-popular">MAIS POPULAR</span>':''}
@@ -463,6 +469,17 @@ function renderSubscription() {
         <button type="button" class="btn plan-choice-action" data-plan-action="${actionType}" data-plan-code="${plan.code}" ${disabled?'disabled':''}>${actionText}</button>
       </article>`;
     }).join('');
+  }
+
+  const scheduledBox = $('scheduledPlanChangeBox');
+  if (scheduledBox) {
+    if (scheduledPlan && subscription?.scheduled_change_at) {
+      scheduledBox.classList.remove('hidden');
+      scheduledBox.innerHTML = `<div><strong>🔄 Mudança de plano agendada</strong><span>Seu ${escapeHtml(currentPlan().name)} continua ativo até ${fmtDate(subscription.scheduled_change_at)}. Depois, sua próxima renovação será no ${escapeHtml(scheduledPlan.name)} por ${money(planPrice(scheduledPlan))}/mês.</span><small>Você não será cobrado agora.</small></div><button type="button" class="btn btn-light" data-cancel-scheduled-plan>Cancelar mudança</button>`;
+    } else {
+      scheduledBox.classList.add('hidden');
+      scheduledBox.innerHTML = '';
+    }
   }
 
   const trialCopy = $('trialPlanMessage');
@@ -480,7 +497,9 @@ function renderSubscription() {
   const help = $('subscriptionActionHelp');
   if (help) {
     if (!state.billingLoaded) help.textContent = 'Carregando informações da assinatura...';
-    else if (active) help.textContent = 'Sua assinatura está ativa. Você pode mudar de plano; o novo valor será aplicado à recorrência do Asaas.';
+    else if (active && scheduledPlan && subscription?.scheduled_change_at) help.textContent = `Seu plano atual continua até ${fmtDate(subscription.scheduled_change_at)}. O downgrade entra na próxima renovação e não gera cobrança agora.`;
+    else if (active && subscription?.provider_subscription_ref) help.textContent = 'Sua assinatura está ativa. Upgrade cobra somente a diferença proporcional do ciclo; downgrade entra na próxima renovação sem cobrança imediata.';
+    else if (active) help.textContent = 'Seu acesso está ativo no NEXO, mas ainda não existe uma recorrência vinculada ao Asaas. Ao escolher outro plano, abriremos o checkout para criar a assinatura mensal.';
     else if (status === 'trialing') help.textContent = 'Você está testando o NEXO Pro completo. Escolha qualquer plano quando quiser.';
     else if (status === 'grace') help.textContent = 'Seu teste terminou e você está nos 2 dias de carência. Escolha um plano para continuar sem interrupção.';
     else if (status === 'support') help.textContent = `NEXO Apoio ativo até ${fmtDate(subscription?.support_extension_ends_at)}.`;
@@ -546,15 +565,70 @@ async function startAsaasCheckout(planCode = 'nexo-essencial') {
   }
 }
 
-async function changeSubscriptionPlan(planCode) {
+async function openPlanChange(planCode) {
   const target = planByCode(planCode);
-  const current = currentPlan();
-  if (!confirm(`Mudar de ${current.name} para ${target.name} por ${money(planPrice(target))}/mês?`)) return;
-
   const btn = document.querySelector(`[data-plan-code="${planCode}"]`);
   const oldText = btn?.textContent || '';
-  if (btn) { btn.disabled=true; btn.textContent='Alterando...'; }
+  if (btn) { btn.disabled=true; btn.textContent='Calculando...'; }
 
+  try {
+    const { data, error } = await sb.functions.invoke('nexo-admin', {
+      body:{ action:'preview_subscription_plan_change', plan_code:planCode }
+    });
+    if (error) {
+      let message=error.message||'Não foi possível calcular a mudança.';
+      try { if(error.context?.json){const x=await error.context.json();message=x?.error||message;} } catch(_){}
+      throw new Error(message);
+    }
+    if(data?.error) throw new Error(data.error);
+    state.pendingPlanChange = { planCode, preview:data };
+
+    const current = currentPlan();
+    const type = data.change_type;
+    $('planChangeTitle').textContent = type==='downgrade' ? `Mudar para ${target.name}` : (type==='upgrade' ? `Fazer upgrade para ${target.name}` : `Assinar ${target.name}`);
+    $('planChangeFromTo').textContent = `${current.name} → ${target.name}`;
+
+    if (type === 'downgrade') {
+      $('planChangeDescription').innerHTML = `Seu <strong>${escapeHtml(current.name)}</strong> permanece completo até <strong>${fmtDate(data.effective_at)}</strong>. A partir dessa renovação, o plano muda para <strong>${escapeHtml(target.name)}</strong>.`;
+      $('planChangeNowLabel').textContent = 'Cobrança agora';
+      $('planChangeNowValue').textContent = money(0);
+      $('planChangeNextLabel').textContent = `Próxima renovação · ${fmtDate(data.next_billing_at)}`;
+      $('planChangeNextValue').textContent = `${money(planPrice(target))}/mês`;
+      $('planChangeNote').textContent = 'Nada será cobrado agora. Você continua usando os recursos do plano atual até a próxima renovação.';
+      $('planChangeConfirm').textContent = 'Confirmar mudança';
+    } else if (type === 'upgrade') {
+      $('planChangeDescription').innerHTML = `O <strong>${escapeHtml(target.name)}</strong> será liberado assim que o pagamento proporcional for confirmado. Faltam <strong>${Number(data.remaining_days||0)} dias</strong> no ciclo atual.`;
+      $('planChangeNowLabel').textContent = 'Diferença proporcional agora';
+      $('planChangeNowValue').textContent = money(data.amount_now||0);
+      $('planChangeNextLabel').textContent = `Próxima renovação · ${fmtDate(data.next_billing_at)}`;
+      $('planChangeNextValue').textContent = `${money(planPrice(target))}/mês`;
+      $('planChangeNote').textContent = 'Você paga somente a diferença correspondente aos dias restantes. Na próxima renovação entra o valor mensal completo do novo plano.';
+      $('planChangeConfirm').textContent = Number(data.amount_now||0)>0 ? `Pagar ${money(data.amount_now)} e fazer upgrade` : 'Fazer upgrade agora';
+    } else {
+      $('planChangeDescription').innerHTML = `Esta conta ainda não possui uma recorrência Asaas vinculada. Será criado um novo checkout para <strong>${escapeHtml(target.name)}</strong>.`;
+      $('planChangeNowLabel').textContent = 'Primeira mensalidade';
+      $('planChangeNowValue').textContent = money(data.amount_now||planPrice(target));
+      $('planChangeNextLabel').textContent = 'Mensalidade seguinte';
+      $('planChangeNextValue').textContent = `${money(planPrice(target))}/mês`;
+      $('planChangeNote').textContent = 'O plano só muda depois que o Asaas confirmar o pagamento.';
+      $('planChangeConfirm').textContent = 'Ir para pagamento';
+    }
+    $('planChangeModal').showModal();
+  } catch(err) {
+    alert(err.message||'Não foi possível calcular a mudança de plano.');
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent=oldText;}
+  }
+}
+
+async function confirmPlanChange() {
+  const pending = state.pendingPlanChange;
+  if (!pending) return;
+  const planCode = pending.planCode;
+  const target = planByCode(planCode);
+  const btn = $('planChangeConfirm');
+  const oldText = btn.textContent;
+  btn.disabled=true; btn.textContent='Processando...';
   try {
     const { data, error } = await sb.functions.invoke('nexo-admin', {
       body:{ action:'change_subscription_plan', plan_code:planCode }
@@ -565,11 +639,37 @@ async function changeSubscriptionPlan(planCode) {
       throw new Error(message);
     }
     if(data?.error) throw new Error(data.error);
+    if (data?.checkout_url) {
+      window.location.href=data.checkout_url;
+      return;
+    }
+    $('planChangeModal').close();
+    state.pendingPlanChange=null;
     await loadBillingData();
-    alert(`Plano alterado para ${target.name}. ✨`);
+    if (data?.scheduled) {
+      alert(`${target.name} agendado para ${fmtDate(data.effective_at)}. Você não será cobrado agora. ✅`);
+    } else if (data?.upgraded) {
+      alert(`Upgrade para ${target.name} concluído. ✨`);
+    } else {
+      alert('Mudança de plano concluída.');
+    }
   } catch(err) {
     alert(err.message||'Não foi possível mudar o plano.');
-    if(btn){btn.disabled=false;btn.textContent=oldText;}
+  } finally {
+    btn.disabled=false; btn.textContent=oldText;
+  }
+}
+
+async function cancelScheduledPlanChange() {
+  if (!confirm('Cancelar a mudança de plano agendada e manter o plano atual na próxima renovação?')) return;
+  try {
+    const { data,error } = await sb.functions.invoke('nexo-admin',{ body:{ action:'cancel_scheduled_plan_change' } });
+    if(error) throw error;
+    if(data?.error) throw new Error(data.error);
+    await loadBillingData();
+    alert('Mudança agendada cancelada. Seu plano atual continuará normalmente.');
+  } catch(err) {
+    alert('Não foi possível cancelar a mudança: '+(err?.message||err));
   }
 }
 
@@ -583,6 +683,20 @@ async function handleBillingReturn() {
 
   if (billing === 'cancel') {
     alert('Pagamento cancelado. Você pode tentar novamente quando quiser.');
+  } else if (billing === 'plan-change-success') {
+    const help = $('subscriptionActionHelp');
+    help.textContent = 'Pagamento proporcional concluído. Estamos aguardando a confirmação automática do Asaas para liberar o novo plano...';
+    const initialPlan = currentPlanCode();
+    let attempts = 0;
+    const poll = setInterval(async()=>{
+      attempts += 1;
+      await loadBillingData();
+      if (currentPlanCode() !== initialPlan || attempts >= 10) {
+        clearInterval(poll);
+        if (currentPlanCode() !== initialPlan) alert(`Upgrade confirmado! Bem-vindo ao ${currentPlan().name}. ✨`);
+        else $('subscriptionActionHelp').textContent = 'Pagamento enviado e ainda em confirmação. O novo plano será liberado automaticamente assim que o Asaas confirmar.';
+      }
+    },1800);
   } else if (billing === 'expired') {
     alert('O checkout expirou. Clique em assinar para gerar um novo link.');
   } else if (billing === 'success') {
@@ -1373,16 +1487,18 @@ function wireEvents() {
   $('incomeSourceForm').addEventListener('submit', saveIncomeSource);
   $('invoicePaymentForm').addEventListener('submit', payInvoice);
   $('invoiceDetailPayBtn').addEventListener('click', ()=>{ const id=$('invoiceDetailPayBtn').dataset.invoiceId; $('invoiceDetailModal').close(); openInvoicePayment(id); });
+  $('planChangeConfirm').addEventListener('click', confirmPlanChange);
 
   $('transactionTypeFilter').addEventListener('change', renderTransactions);
   $('transactionStatusFilter').addEventListener('change', renderTransactions);
 
   document.body.addEventListener('click', async (e)=>{
+    const cancelScheduled = e.target.closest('[data-cancel-scheduled-plan]'); if(cancelScheduled) return cancelScheduledPlanChange();
     const planAction = e.target.closest('[data-plan-action]');
     if(planAction) {
       const action=planAction.dataset.planAction; const code=planAction.dataset.planCode;
       if(action==='checkout') return startAsaasCheckout(code);
-      if(action==='change') return changeSubscriptionPlan(code);
+      if(action==='change') return openPlanChange(code);
       return;
     }
     const payInvoiceBtn = e.target.closest('[data-pay-invoice]'); if(payInvoiceBtn) return openInvoicePayment(payInvoiceBtn.dataset.payInvoice);

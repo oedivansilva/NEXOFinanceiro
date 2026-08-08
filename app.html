@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=9.1" />
+  <link rel="stylesheet" href="style.css?v=9.3" />
 </head>
 <body>
   <header class="nexo-topbar app-global-topbar">
@@ -169,6 +169,7 @@
           </div>
           <div id="planOptionsGrid" class="plan-options-grid"></div>
           <p id="subscriptionActionHelp" class="subscription-help">Carregando informações da assinatura...</p>
+          <div id="scheduledPlanChangeBox" class="scheduled-plan-change-box hidden"></div>
         </article>
 
         <div class="subscription-grid subscription-account-grid">
@@ -352,6 +353,27 @@
     </form>
   </dialog>
 
+
+  <dialog id="planChangeModal" class="modal">
+    <div class="modal-card plan-change-card">
+      <div class="modal-head">
+        <div><p class="eyebrow">TROCA DE PLANO</p><h2 id="planChangeTitle">Mudar de plano</h2></div>
+        <button type="button" class="icon-btn" data-close="planChangeModal">×</button>
+      </div>
+      <div id="planChangeFromTo" class="plan-change-route">—</div>
+      <div id="planChangeDescription" class="plan-change-description"></div>
+      <div class="plan-change-values">
+        <div><span id="planChangeNowLabel">Cobrança agora</span><strong id="planChangeNowValue">R$ 0,00</strong></div>
+        <div><span id="planChangeNextLabel">Próxima renovação</span><strong id="planChangeNextValue">—</strong></div>
+      </div>
+      <div id="planChangeNote" class="plan-change-note"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="planChangeModal">Cancelar</button>
+        <button type="button" id="planChangeConfirm" class="btn btn-primary">Confirmar mudança</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="nexoSupportModal" class="modal">
     <form id="nexoSupportForm" method="dialog" class="modal-card wide">
       <div class="modal-head">
@@ -441,6 +463,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js?v=9.0"></script>
-  <script src="app.js?v=9.1"></script>
+  <script src="app.js?v=9.3"></script>
 </body>
 </html>
