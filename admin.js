@@ -4,7 +4,7 @@ const adminState = {
   session: null,
   user: null,
   profile: null,
-  data: { users: [], subscriptions: [], requests: [], tickets: [], plans: [], audit: [], summary: {} },
+  data: { users: [], subscriptions: [], payments: [], tickets: [], plans: [], audit: [], provider_settings: null, summary: {} },
   selectedUser: null,
   view: 'overview'
 };
@@ -12,7 +12,8 @@ const adminState = {
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));
 const fmtDateTime = v => v ? new Date(v).toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' }) : '—';
-const fmtDate = v => v ? new Date(v+'T12:00:00').toLocaleDateString('pt-BR') : '—';
+const fmtDate = v => v ? new Date(String(v).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR') : '—';
+const money = v => Number(v || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
 function roleLabel(role) {
   return { owner:'Proprietário', admin:'Administrador', support:'Suporte', user:'Usuário' }[role] || 'Usuário';
@@ -99,12 +100,12 @@ function renderAdminAll() {
   const s = adminState.data.summary || {};
   $('adminUsersCount').textContent = s.users || 0;
   $('adminActiveSubsCount').textContent = s.active_subscriptions || 0;
-  $('adminPendingActivationsCount').textContent = s.pending_activations || 0;
+  $('adminMrr').textContent = money(s.mrr || 0);
   $('adminOpenTicketsCount').textContent = s.open_tickets || 0;
 
   renderOverview();
   renderUsers();
-  renderActivations();
+  renderSubscriptions();
   renderSupport();
   renderAudit();
 }
@@ -114,12 +115,14 @@ function userName(user) {
 }
 
 function renderOverview() {
-  const pending = (adminState.data.requests || []).filter(r => r.status === 'pending').slice(0,4);
-  $('overviewActivations').innerHTML = pending.length ? pending.map(r => `
-    <div class="admin-row-card">
-      <div class="admin-row-card-main"><strong>${esc(r.user_name || r.user_email || 'Usuário')}</strong><small>${esc(r.user_email || '')} · ${fmtDateTime(r.created_at)}</small></div>
-      <div class="admin-row-actions"><button class="mini-btn success" data-approve-request="${r.id}">Aprovar</button></div>
-    </div>`).join('') : '<div class="admin-empty">Nenhuma ativação pendente. 🎉</div>';
+  const subs = [...(adminState.data.subscriptions || [])].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,5);
+  $('overviewSubscriptions').innerHTML = subs.length ? subs.map(sub => {
+    const user = (adminState.data.users || []).find(u => u.id === sub.user_id);
+    return `<div class="admin-row-card">
+      <div class="admin-row-card-main"><strong>${esc(userName(user))}</strong><small>${esc(user?.email || '')} · próxima cobrança ${fmtDate(sub.next_billing_at)}</small></div>
+      <span class="admin-status-badge ${sub.status}">${subscriptionLabel(sub.status)}</span>
+    </div>`;
+  }).join('') : '<div class="admin-empty">Nenhuma assinatura cadastrada.</div>';
 
   const tickets = (adminState.data.tickets || []).filter(t => ['open','in_progress'].includes(t.status)).slice(0,4);
   $('overviewTickets').innerHTML = tickets.length ? tickets.map(t => `
@@ -153,24 +156,62 @@ function renderUsers() {
   $('adminUsersTable').innerHTML = usersTable(users, true);
 }
 
-function renderActivations() {
-  const requests = adminState.data.requests || [];
-  if (!requests.length) {
-    $('adminActivationList').innerHTML = '<div class="admin-empty">Nenhuma solicitação de assinatura.</div>';
-    return;
+function renderSubscriptions() {
+  const settings = adminState.data.provider_settings;
+  const badge = $('asaasIntegrationBadge');
+  const btn = $('configureAsaasBtn');
+  const info = $('asaasIntegrationInfo');
+  const configured = Boolean(settings?.webhook_id);
+  badge.textContent = configured ? 'Conectado' : 'Não configurado';
+  badge.className = `admin-status-badge ${configured ? 'active' : 'cancelled'}`;
+  btn.disabled = configured;
+  btn.textContent = configured ? 'Asaas conectado ✓' : 'Conectar Asaas';
+  info.textContent = configured
+    ? `Webhook ativo · ambiente ${settings.environment === 'sandbox' ? 'Sandbox' : 'Produção'} · configurado em ${fmtDateTime(settings.configured_at)}`
+    : 'Conecte uma vez para o NEXO criar checkouts e receber confirmações automaticamente.';
+
+  const s = adminState.data.summary || {};
+  $('adminSubsActiveMetric').textContent = s.active_subscriptions || 0;
+  $('adminSubsOverdueMetric').textContent = s.overdue_subscriptions || 0;
+  $('adminSubsMrrMetric').textContent = money(s.mrr || 0);
+
+  const subs = adminState.data.subscriptions || [];
+  if (!subs.length) {
+    $('adminSubscriptionList').innerHTML = '<div class="admin-empty">Nenhuma assinatura cadastrada.</div>';
+  } else {
+    $('adminSubscriptionList').innerHTML = `<table class="admin-table"><thead><tr><th>Cliente</th><th>Status</th><th>Provedor</th><th>Último pagamento</th><th>Próxima cobrança</th></tr></thead><tbody>${subs.map(sub => {
+      const u=(adminState.data.users||[]).find(x=>x.id===sub.user_id);
+      return `<tr><td><strong>${esc(userName(u))}</strong><small>${esc(u?.email||'')}</small></td><td><span class="admin-status-badge ${sub.status}">${subscriptionLabel(sub.status)}</span></td><td>${esc(String(sub.provider||'—').toUpperCase())}</td><td>${fmtDateTime(sub.last_payment_at)}</td><td>${fmtDate(sub.next_billing_at)}</td></tr>`;
+    }).join('')}</tbody></table>`;
   }
-  $('adminActivationList').innerHTML = requests.map(r => `
-    <div class="admin-row-card">
-      <div class="admin-row-card-main">
-        <strong>${esc(r.user_name || r.user_email || 'Usuário')}</strong>
-        <small>${esc(r.user_email || '')} · solicitada em ${fmtDateTime(r.created_at)}</small>
-        ${r.admin_note?`<small>Nota: ${esc(r.admin_note)}</small>`:''}
-      </div>
-      <div class="admin-row-actions">
-        <span class="admin-status-badge ${r.status}">${requestLabel(r.status)}</span>
-        ${r.status==='pending'?`<button class="mini-btn success" data-approve-request="${r.id}">Aprovar</button><button class="mini-btn danger" data-reject-request="${r.id}">Recusar</button>`:''}
-      </div>
-    </div>`).join('');
+
+  const payments = adminState.data.payments || [];
+  if (!payments.length) {
+    $('adminPaymentsList').innerHTML = '<div class="admin-empty">Nenhum pagamento de assinatura recebido ainda.</div>';
+  } else {
+    $('adminPaymentsList').innerHTML = `<table class="admin-table"><thead><tr><th>Cliente</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Método</th></tr></thead><tbody>${payments.slice(0,100).map(p => {
+      const u=(adminState.data.users||[]).find(x=>x.id===p.user_id);
+      return `<tr><td><strong>${esc(userName(u))}</strong><small>${esc(u?.email||'')}</small></td><td>${fmtDate(p.due_date)}</td><td>${money(p.amount)}</td><td><span class="admin-status-badge ${p.status==='received'||p.status==='confirmed'?'active':p.status==='overdue'||p.status==='failed'?'past_due':'cancelled'}">${esc(paymentLabel(p.status))}</span></td><td>${esc(p.billing_type||'—')}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }
+}
+
+function paymentLabel(status) {
+  return {pending:'Pendente',confirmed:'Confirmado',received:'Recebido',overdue:'Vencido',failed:'Falhou',refunded:'Estornado',chargeback:'Chargeback',cancelled:'Cancelado'}[status] || status || '—';
+}
+
+async function configureAsaas() {
+  if (!confirm('Conectar o NEXO ao Asaas e criar o webhook automático de pagamentos?')) return;
+  const btn=$('configureAsaasBtn');
+  btn.disabled=true; btn.textContent='Conectando...';
+  try {
+    const data=await invokeAdmin('configure_asaas_webhook');
+    alert(data.already_configured ? 'A integração Asaas já estava configurada.' : 'Asaas conectado! O NEXO já pode ativar assinaturas automaticamente.');
+    await loadAdminDashboard();
+  } catch(e) {
+    alert('Não foi possível conectar o Asaas: '+e.message);
+    btn.disabled=false; btn.textContent='Conectar Asaas';
+  }
 }
 
 function renderSupport() {
@@ -244,25 +285,6 @@ function openUserModal(userId) {
   $('adminUserModal').showModal();
 }
 
-async function approveRequest(id) {
-  const nextBilling = prompt('Próxima cobrança na InfinitePay (AAAA-MM-DD). Se não souber, deixe vazio:') || '';
-  if (nextBilling && !/^\d{4}-\d{2}-\d{2}$/.test(nextBilling)) return alert('Use o formato AAAA-MM-DD.');
-  if (!confirm('Confirmar que você verificou o pagamento/assinatura na InfinitePay e deseja liberar o NEXO?')) return;
-  try {
-    await invokeAdmin('approve_activation', { request_id:id, next_billing_at:nextBilling || null });
-    await loadAdminDashboard();
-  } catch (e) { alert('Erro: '+e.message); }
-}
-
-async function rejectRequest(id) {
-  const note = prompt('Motivo da recusa (opcional):') || '';
-  if (!confirm('Recusar esta solicitação de ativação?')) return;
-  try {
-    await invokeAdmin('reject_activation', { request_id:id, admin_note:note });
-    await loadAdminDashboard();
-  } catch (e) { alert('Erro: '+e.message); }
-}
-
 function wireAdminEvents() {
   if (document.body.dataset.adminWired === '1') return;
   document.body.dataset.adminWired = '1';
@@ -270,6 +292,7 @@ function wireAdminEvents() {
   $('adminLogoutBtn').addEventListener('click', async()=>{ await sb.auth.signOut({scope:'local'}); window.location.href='index.html'; });
   $('adminRefreshBtn').addEventListener('click', loadAdminDashboard);
   $('adminUserSearch').addEventListener('input', renderUsers);
+  $('configureAsaasBtn').addEventListener('click', configureAsaas);
 
   document.querySelectorAll('.admin-nav-item').forEach(btn => btn.addEventListener('click', ()=>switchAdminView(btn.dataset.adminView)));
   document.querySelectorAll('[data-admin-jump]').forEach(btn => btn.addEventListener('click', ()=>switchAdminView(btn.dataset.adminJump)));
@@ -278,10 +301,6 @@ function wireAdminEvents() {
   document.body.addEventListener('click', async e => {
     const manage = e.target.closest('[data-manage-user]');
     if (manage) return openUserModal(manage.dataset.manageUser);
-    const approve = e.target.closest('[data-approve-request]');
-    if (approve) return approveRequest(approve.dataset.approveRequest);
-    const reject = e.target.closest('[data-reject-request]');
-    if (reject) return rejectRequest(reject.dataset.rejectRequest);
     const progress = e.target.closest('[data-ticket-progress]');
     if (progress) {
       try { await invokeAdmin('update_ticket', { ticket_id:progress.dataset.ticketProgress, status:'in_progress' }); await loadAdminDashboard(); }

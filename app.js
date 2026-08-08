@@ -12,7 +12,8 @@ const state = {
   invoicePayments: [],
   plan: null,
   subscription: null,
-  subscriptionRequest: null,
+  checkoutSession: null,
+  billingReturnHandled: false,
   billingLoaded: false,
   selectedMonth: '',
   transactionType: 'expense'
@@ -36,14 +37,13 @@ const escapeHtml = (s='') => String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<
 const fmtDate = (date) => date ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 const uid = () => state.user?.id;
 
-const INFINITEPAY_PLAN_URL = 'https://invoice.infinitepay.io/plans/oedivansilva/TBs7gYJ62L';
 const DEFAULT_PLAN = {
   code: 'nexo-pessoal',
   name: 'NEXO Financeiro Pessoal',
   description: 'Controle de contas, cartões, faturas e planejamento financeiro em um único lugar.',
-  provider: 'infinitepay',
-  provider_plan_url: INFINITEPAY_PLAN_URL,
-  provider_plan_ref: 'TBs7gYJ62L'
+  price: 19.90,
+  billing_cycle: 'monthly',
+  provider: 'asaas'
 };
 
 const monthLabel = (month) => {
@@ -220,27 +220,28 @@ async function loadBillingData() {
   renderSubscription();
 
   try {
-    const [planRes, subscriptionRes, requestRes] = await Promise.all([
+    const [planRes, subscriptionRes, checkoutRes] = await Promise.all([
       sb.from('plans').select('*').eq('code', 'nexo-pessoal').eq('active', true).maybeSingle(),
       sb.from('subscriptions').select('*').eq('user_id', uid()).maybeSingle(),
-      sb.from('subscription_activation_requests').select('*').eq('user_id', uid()).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      sb.from('asaas_checkout_sessions').select('*').eq('user_id', uid()).order('created_at', { ascending: false }).limit(1).maybeSingle()
     ]);
 
     if (planRes.error) console.warn('Planos ainda não disponíveis:', planRes.error.message);
     if (subscriptionRes.error) console.warn('Assinatura ainda não disponível:', subscriptionRes.error.message);
-    if (requestRes.error) console.warn('Solicitações de assinatura ainda não disponíveis:', requestRes.error.message);
+    if (checkoutRes.error) console.warn('Checkout Asaas ainda não disponível:', checkoutRes.error.message);
 
     state.plan = planRes.data || DEFAULT_PLAN;
     state.subscription = subscriptionRes.data || null;
-    state.subscriptionRequest = requestRes.data || null;
+    state.checkoutSession = checkoutRes.data || null;
   } catch (error) {
     console.warn('Não foi possível carregar a assinatura:', error);
     state.plan = DEFAULT_PLAN;
     state.subscription = null;
-    state.subscriptionRequest = null;
+    state.checkoutSession = null;
   } finally {
     state.billingLoaded = true;
     renderSubscription();
+    handleBillingReturn();
   }
 }
 
@@ -260,13 +261,20 @@ function subscriptionStatusLabel(status = subscriptionStatusKey()) {
   }[status] || 'Não assinante';
 }
 
-function requestStatusLabel(status) {
+function checkoutStatusLabel(status) {
   return {
-    pending: 'Aguardando validação',
-    approved: 'Aprovada',
-    rejected: 'Não aprovada',
-    cancelled: 'Cancelada'
+    initiated: 'Preparando checkout',
+    active: 'Aguardando pagamento',
+    pending: 'Aguardando pagamento',
+    paid: 'Pagamento concluído',
+    canceled: 'Checkout cancelado',
+    expired: 'Checkout expirado',
+    failed: 'Falha ao criar checkout'
   }[status] || status || '—';
+}
+
+function planPrice(plan = state.plan || DEFAULT_PLAN) {
+  return Number(plan?.price ?? 19.90);
 }
 
 function renderSubscription() {
@@ -274,14 +282,15 @@ function renderSubscription() {
 
   const plan = state.plan || DEFAULT_PLAN;
   const subscription = state.subscription;
-  const request = state.subscriptionRequest;
+  const checkout = state.checkoutSession;
   const status = subscriptionStatusKey();
-  const active = status === 'active' || status === 'trialing' || status === 'grace';
-  const pendingRequest = request?.status === 'pending';
+  const active = ['active','trialing','grace'].includes(status);
+  const checkoutStillValid = checkout && ['active','pending','initiated'].includes(checkout.status) && (!checkout.expires_at || new Date(checkout.expires_at).getTime() > Date.now());
 
   $('subscriptionPlanName').textContent = plan.name || DEFAULT_PLAN.name;
   $('subscriptionPlanDescription').textContent = plan.description || DEFAULT_PLAN.description;
   $('subscriptionDetailPlan').textContent = plan.name || DEFAULT_PLAN.name;
+  $('subscriptionPrice').textContent = money(planPrice(plan));
 
   const badge = $('subscriptionStatusBadge');
   badge.className = `subscription-status subscription-status-${status}`;
@@ -290,63 +299,122 @@ function renderSubscription() {
   $('subscriptionDetailStatus').textContent = state.billingLoaded ? subscriptionStatusLabel(status) : 'Carregando...';
   $('subscriptionDetailStarted').textContent = subscription?.started_at ? fmtDate(String(subscription.started_at).slice(0,10)) : '—';
   $('subscriptionDetailNextBilling').textContent = subscription?.next_billing_at ? fmtDate(String(subscription.next_billing_at).slice(0,10)) : '—';
-  $('subscriptionDetailVerified').textContent = subscription?.last_verified_at ? new Date(subscription.last_verified_at).toLocaleString('pt-BR') : '—';
+  $('subscriptionDetailLastPayment').textContent = subscription?.last_payment_at ? new Date(subscription.last_payment_at).toLocaleString('pt-BR') : '—';
 
   const subscribeBtn = $('subscribePlanBtn');
-  subscribeBtn.href = plan.provider_plan_url || INFINITEPAY_PLAN_URL;
-  subscribeBtn.textContent = active ? 'Abrir plano na InfinitePay ↗' : 'Assinar pela InfinitePay ↗';
-
-  const requestBtn = $('requestActivationBtn');
-  requestBtn.disabled = !state.billingLoaded || active || pendingRequest || !plan.id;
-  requestBtn.classList.toggle('hidden', active);
-  requestBtn.textContent = pendingRequest ? 'Ativação solicitada ✓' : 'Já assinei · solicitar ativação';
+  subscribeBtn.disabled = !state.billingLoaded || active;
+  if (active) {
+    subscribeBtn.textContent = 'Assinatura ativa ✓';
+  } else if (checkoutStillValid && checkout.checkout_url) {
+    subscribeBtn.textContent = 'Continuar pagamento';
+  } else {
+    subscribeBtn.textContent = `Assinar por ${money(planPrice(plan))}/mês`;
+  }
 
   const help = $('subscriptionActionHelp');
   if (!state.billingLoaded) {
     help.textContent = 'Carregando informações da assinatura...';
   } else if (active) {
-    help.textContent = 'Sua assinatura está liberada no NEXO. A cobrança continua sendo gerenciada pela InfinitePay.';
-  } else if (pendingRequest) {
-    help.textContent = 'Recebemos sua solicitação. O suporte NEXO precisa validar o pagamento antes de ativar o plano.';
-  } else if (!plan.id) {
-    help.textContent = 'O plano já pode ser assinado na InfinitePay. Execute primeiro o SQL de assinaturas no Supabase para habilitar a solicitação de ativação.';
+    help.textContent = 'Sua assinatura está liberada. As próximas cobranças são acompanhadas automaticamente pelo Asaas.';
+  } else if (status === 'past_due') {
+    help.textContent = 'A última cobrança está pendente. Regularize o pagamento para manter o acesso.';
+  } else if (status === 'suspended') {
+    help.textContent = 'A assinatura está suspensa. Entre em contato com o suporte ou realize uma nova assinatura.';
+  } else if (checkoutStillValid) {
+    help.textContent = 'Seu checkout ainda está ativo. Continue o pagamento; a liberação acontece automaticamente após a confirmação.';
   } else {
-    help.textContent = 'Depois de concluir a assinatura na InfinitePay, volte aqui e solicite a ativação. Nesta primeira versão, a validação será feita pelo suporte NEXO.';
+    help.textContent = 'Você será levado ao checkout seguro do Asaas. Depois do pagamento, não é necessário avisar o suporte.';
   }
 
-  const requestBox = $('subscriptionRequestBox');
-  if (request) {
-    requestBox.classList.remove('hidden');
-    requestBox.innerHTML = `<strong>Última solicitação</strong><span>${escapeHtml(requestStatusLabel(request.status))}</span><small>Enviada em ${new Date(request.created_at).toLocaleString('pt-BR')}</small>`;
+  const checkoutBox = $('subscriptionCheckoutBox');
+  if (checkout) {
+    checkoutBox.classList.remove('hidden');
+    checkoutBox.innerHTML = `<strong>Último checkout</strong><span>${escapeHtml(checkoutStatusLabel(checkout.status))}</span><small>Criado em ${new Date(checkout.created_at).toLocaleString('pt-BR')}</small>`;
   } else {
-    requestBox.classList.add('hidden');
-    requestBox.innerHTML = '';
+    checkoutBox.classList.add('hidden');
+    checkoutBox.innerHTML = '';
   }
 }
 
-async function requestSubscriptionActivation() {
-  const plan = state.plan;
+async function startAsaasCheckout() {
   if (!state.billingLoaded) return;
-  if (!plan?.id) return alert('Execute o SQL de assinaturas no Supabase antes de solicitar a ativação.');
-  if (state.subscription?.status === 'active') return alert('Sua assinatura já está ativa.');
-  if (state.subscriptionRequest?.status === 'pending') return alert('Sua solicitação já está aguardando validação.');
+  if (['active','trialing','grace'].includes(subscriptionStatusKey())) return alert('Sua assinatura já está ativa.');
 
-  const confirmed = confirm('Você já concluiu a assinatura na InfinitePay e deseja solicitar a ativação do NEXO?');
-  if (!confirmed) return;
-
-  const { error } = await sb.from('subscription_activation_requests').insert({
-    user_id: uid(),
-    plan_id: plan.id,
-    status: 'pending'
-  });
-
-  if (error) {
-    if (error.code === '23505') return alert('Já existe uma solicitação de ativação pendente para sua conta.');
-    return alert('Não foi possível solicitar a ativação: ' + error.message);
+  const existing = state.checkoutSession;
+  const existingValid = existing && ['active','pending','initiated'].includes(existing.status) && existing.checkout_url && (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now());
+  if (existingValid) {
+    window.location.href = existing.checkout_url;
+    return;
   }
 
-  await loadBillingData();
-  alert('Solicitação enviada! O suporte NEXO poderá validar sua assinatura.');
+  const btn = $('subscribePlanBtn');
+  const oldText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Abrindo checkout...';
+
+  try {
+    const { data, error } = await sb.functions.invoke('nexo-admin', {
+      body: { action: 'create_asaas_checkout' }
+    });
+    if (error) {
+      let message = error.message || 'Não foi possível abrir o checkout.';
+      try {
+        if (error.context?.json) {
+          const ctx = await error.context.json();
+          message = ctx?.error || message;
+        }
+      } catch (_) {}
+      throw new Error(message);
+    }
+    if (data?.error) throw new Error(data.error);
+    if (data?.already_active) {
+      await loadBillingData();
+      return;
+    }
+    if (!data?.checkout_url) throw new Error('O Asaas não retornou o link do checkout.');
+    window.location.href = data.checkout_url;
+  } catch (error) {
+    console.error(error);
+    alert('Não foi possível iniciar a assinatura: ' + (error?.message || error));
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+async function handleBillingReturn() {
+  if (state.billingReturnHandled) return;
+  const params = new URLSearchParams(window.location.search);
+  const billing = params.get('billing');
+  if (!billing) return;
+  state.billingReturnHandled = true;
+  switchView('subscription');
+
+  if (billing === 'cancel') {
+    alert('Pagamento cancelado. Você pode tentar novamente quando quiser.');
+  } else if (billing === 'expired') {
+    alert('O checkout expirou. Clique em assinar para gerar um novo link.');
+  } else if (billing === 'success') {
+    if (subscriptionStatusKey() === 'active') {
+      alert('Pagamento confirmado! Sua assinatura NEXO está ativa. 🎉');
+    } else {
+      const help = $('subscriptionActionHelp');
+      help.textContent = 'Pagamento concluído. Estamos aguardando a confirmação automática do Asaas...';
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts += 1;
+        await loadBillingData();
+        if (subscriptionStatusKey() === 'active' || attempts >= 10) {
+          clearInterval(poll);
+          if (subscriptionStatusKey() === 'active') alert('Pagamento confirmado! Sua assinatura NEXO está ativa. 🎉');
+          else $('subscriptionActionHelp').textContent = 'O pagamento foi enviado e ainda está sendo confirmado. Atualize a página em alguns instantes.';
+        }
+      }, 2000);
+    }
+  }
+
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.searchParams.delete('billing');
+  window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
 }
 
 async function syncCardInvoices() {
@@ -858,7 +926,7 @@ function wireEvents() {
   $('newCardBtn').addEventListener('click', ()=>openCard());
   $('newCategoryBtn').addEventListener('click', ()=>openCategory());
   $('newIncomeSourceBtn').addEventListener('click', ()=>openIncomeSource());
-  $('requestActivationBtn').addEventListener('click', requestSubscriptionActivation);
+  $('subscribePlanBtn').addEventListener('click', startAsaasCheckout);
 
   document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', ()=>$(btn.dataset.close).close()));
   document.querySelectorAll('.type-option').forEach(btn=>btn.addEventListener('click',()=>setTransactionType(btn.dataset.type)));

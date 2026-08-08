@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=6.0">
-  <link rel="stylesheet" href="admin.css?v=6.0">
+  <link rel="stylesheet" href="style.css?v=7.0">
+  <link rel="stylesheet" href="admin.css?v=7.0">
 </head>
 <body class="admin-page">
   <header class="nexo-topbar app-global-topbar admin-global-topbar">
@@ -67,14 +67,14 @@
         <div class="admin-summary-grid">
           <article class="admin-summary-card"><span>Usuários cadastrados</span><strong id="adminUsersCount">0</strong><small>Total no Supabase Auth</small></article>
           <article class="admin-summary-card"><span>Assinaturas ativas</span><strong id="adminActiveSubsCount">0</strong><small>Clientes liberados</small></article>
-          <article class="admin-summary-card warning"><span>Aguardando ativação</span><strong id="adminPendingActivationsCount">0</strong><small>Solicitações pendentes</small></article>
+          <article class="admin-summary-card"><span>Receita recorrente</span><strong id="adminMrr">R$ 0,00</strong><small>MRR estimado</small></article>
           <article class="admin-summary-card"><span>Chamados abertos</span><strong id="adminOpenTicketsCount">0</strong><small>Suporte pendente</small></article>
         </div>
 
         <div class="admin-two-col">
           <article class="admin-panel">
-            <div class="admin-panel-head"><div><p class="eyebrow">ASSINATURAS</p><h2>Ativações pendentes</h2></div><button class="text-button" data-admin-jump="activations">Ver todas</button></div>
-            <div id="overviewActivations" class="admin-stack"></div>
+            <div class="admin-panel-head"><div><p class="eyebrow">ASSINATURAS</p><h2>Assinaturas recentes</h2></div><button class="text-button" data-admin-jump="activations">Ver todas</button></div>
+            <div id="overviewSubscriptions" class="admin-stack"></div>
           </article>
           <article class="admin-panel">
             <div class="admin-panel-head"><div><p class="eyebrow">SUPORTE</p><h2>Chamados recentes</h2></div><button class="text-button" data-admin-jump="support">Ver todos</button></div>
@@ -99,9 +99,32 @@
       </section>
 
       <section id="activationsAdminView" class="admin-view">
+        <div class="admin-two-col">
+          <article class="admin-panel">
+            <div class="admin-panel-head"><div><p class="eyebrow">ASAAS</p><h2>Integração automática</h2></div><span id="asaasIntegrationBadge" class="admin-status-badge cancelled">Não configurada</span></div>
+            <div class="asaas-integration-card">
+              <div><strong>Webhook NEXO ↔ Asaas</strong><small id="asaasIntegrationInfo">Conecte uma vez para o NEXO ativar assinaturas automaticamente.</small></div>
+              <button id="configureAsaasBtn" type="button" class="btn btn-primary">Conectar Asaas</button>
+            </div>
+          </article>
+          <article class="admin-panel">
+            <div class="admin-panel-head"><div><p class="eyebrow">COBRANÇA</p><h2>Indicadores</h2></div></div>
+            <div class="admin-mini-metrics">
+              <div><span>Ativas</span><strong id="adminSubsActiveMetric">0</strong></div>
+              <div><span>Pendentes</span><strong id="adminSubsOverdueMetric">0</strong></div>
+              <div><span>MRR</span><strong id="adminSubsMrrMetric">R$ 0,00</strong></div>
+            </div>
+          </article>
+        </div>
+
         <article class="admin-panel">
-          <div class="admin-panel-head"><div><p class="eyebrow">INFINITEPAY</p><h2>Solicitações de ativação</h2></div><a id="adminInfinitePayLink" class="btn btn-light" href="https://invoice.infinitepay.io/plans/oedivansilva/TBs7gYJ62L" target="_blank" rel="noopener noreferrer">Abrir InfinitePay ↗</a></div>
-          <div id="adminActivationList" class="admin-stack"></div>
+          <div class="admin-panel-head"><div><p class="eyebrow">CLIENTES</p><h2>Assinaturas</h2></div></div>
+          <div id="adminSubscriptionList" class="admin-table-wrap"></div>
+        </article>
+
+        <article class="admin-panel">
+          <div class="admin-panel-head"><div><p class="eyebrow">PAGAMENTOS</p><h2>Últimas cobranças</h2></div></div>
+          <div id="adminPaymentsList" class="admin-table-wrap"></div>
         </article>
       </section>
 
@@ -177,7 +200,7 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=6.0"></script>
-  <script src="admin.js?v=6.0"></script>
+  <script src="supabase-config.js?v=7.0"></script>
+  <script src="admin.js?v=7.0"></script>
 </body>
 </html>

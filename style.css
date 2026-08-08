@@ -257,7 +257,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--orange);
 
 
 /* =========================================================
-   NEXO FINANCEIRO — ASSINATURAS / INFINITEPAY
+   NEXO FINANCEIRO — ASSINATURAS / ASAAS
    ========================================================= */
 .subscription-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:16px;margin-bottom:16px}
 .subscription-plan-card{position:relative;overflow:hidden;background:linear-gradient(145deg,#2B2E34 0%,#1E2127 100%);color:#fff;border-radius:22px;padding:26px;box-shadow:0 14px 34px rgba(31,34,40,.14)}
@@ -316,3 +316,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--orange);
 
 /* NEXO V6 — suporte / administração */
 .auth-forgot-btn{display:block;margin:11px auto 0;font-size:12px}.support-access-copy{font-size:12px;line-height:1.55;margin:0 0 8px}.support-honeypot{position:absolute!important;left:-9999px!important;opacity:0!important;pointer-events:none!important}.modal-card textarea{width:100%;resize:vertical;min-height:90px;border:1px solid #dfe2e7;border-radius:12px;padding:11px 12px;font:500 13px Poppins,sans-serif;outline:none}.modal-card textarea:focus{border-color:#f1a08e;box-shadow:0 0 0 3px rgba(238,77,45,.08)}
+
+
+/* =========================================================
+   V7 — ASSINATURAS ASAAS
+   ========================================================= */
+.subscription-price-row{display:flex;align-items:baseline;gap:8px;margin:18px 0 8px;padding:14px 16px;border-radius:16px;background:rgba(238,77,45,.07);border:1px solid rgba(238,77,45,.14)}
+.subscription-price-row strong{font-size:30px;line-height:1;color:#EE4D2D;letter-spacing:-.7px}
+.subscription-price-row span{font-size:13px;font-weight:600;color:#69707d}
+.provider-mark.provider-asaas{background:#0b43e8;color:#fff;font-weight:800;font-family:Poppins,sans-serif}
+#subscribePlanBtn[disabled]{opacity:.7;cursor:not-allowed}
